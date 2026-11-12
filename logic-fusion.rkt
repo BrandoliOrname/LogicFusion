@@ -26,20 +26,19 @@
 ;;
 ;; ============================================================================
 
-;; ============================================================================
-
 
 ;; ============================================================================
-; Especificación Léxica
-
-; Instrucciones para crear la especificación léxica
-; <scanner-spec      := ({<exp-reg-y-acción>}*)
-; <exp-reg-y-acción> := (<nombre> ({<exp-reg>}*) <salida>)
-; <nombre>           := <símbolo>
-; <exp-reg>          := <cadena> | letter | digit | whitespace | any
-;                    := (not <caracter>) | (or {<exp-reg>}*)
-;                    := (arbno <exp-reg>) | (concat {<exp-reg>}*)
-; <salida>           := skip | symbol | number | string
+;; ESPECIFICACIÓN LÉXICA
+;; ============================================================================
+;;
+;; Instrucciones para crear la especificación léxica
+;; <scanner-spec      := ({<exp-reg-y-acción>}*)
+;; <exp-reg-y-acción> := (<nombre> ({<exp-reg>}*) <salida>)
+;; <nombre>           := <símbolo>
+;; <exp-reg>          := <cadena> | letter | digit | whitespace | any
+;;                    := (not <caracter>) | (or {<exp-reg>}*)
+;;                    := (arbno <exp-reg>) | (concat {<exp-reg>}*)
+;; <salida>           := skip | symbol | number | string
 
 (define scanner-spec-logicfusion
   '((espacio-blanco (whitespace) skip)                                   
@@ -51,22 +50,22 @@
     (identificador (letter (arbno (or letter digit "?"))) symbol)        
     (texto ("\"" (arbno (not #\")) "\"") string) 
     ))
-
 ;; ============================================================================
 
 ;; ============================================================================
-; Especificacion Sintáctica (Gramatica)
-
-; Instrucciones para crear la especificación sintática
-; <gramática>   := ({<producción>}*)
-; <producción>  := (<lhs> ({rhs-item>}*) <nombre-prod>)
-; <lhs>         := <símbolo>
-; <rhs-item>    := <símbolo> | <cadena>
-;               := (arbno {<rhs-item>}*)
-;               := (separated-list {<rhs-item>}* <cadena>)
-; <nombre-prod> := <símbolo>
-
-; Nota: rhs = nombre de la especificación lexica si solo si esta definido en la léxica
+;; ESPECFICACIÓN SINTÁCTICA (GRAMATICA)
+;; ============================================================================
+;;
+;; Instrucciones para crear la especificación sintática
+;; <gramática>   := ({<producción>}*)
+;; <producción>  := (<lhs> ({rhs-item>}*) <nombre-prod>)
+;; <lhs>         := <símbolo>
+;; <rhs-item>    := <símbolo> | <cadena>
+;;               := (arbno {<rhs-item>}*)
+;;               := (separated-list {<rhs-item>}* <cadena>)
+;; <nombre-prod> := <símbolo>
+;;
+;; Nota: rhs = nombre de la especificación lexica si solo si esta definido en la léxica
 
 (define gramatica-logicfusion
   '((programa ("GLOBALS" "{" (arbno definicion) "}" 
@@ -88,11 +87,13 @@
     (tipo ("vector" "<" tipo ">") vector-tipo)
     (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
 
-    ;; Expresiones base
-    (expresion (number) entero-lit)
-    (expresion (float-lit) decimal-lit)
-    (expresion (string-lit) cadena-lit)
-    (expresion (identifier) variable-exp)
+    ;; Expresiones base => Especificación Léxica
+    (expresion (entero-negativo) numero-lit)
+    (expresion (entero-positivo) numero-lit)
+    (expresion (decimal-negativo) numero-lit)
+    (expresion (decimal-positivo) numero-lit)
+    (expresion (texto) cadena-lit)
+    (expresion (identificador) variable-exp)
     (expresion ("True") true-lit)
     (expresion ("False") false-lit)
     (expresion ("(" expresion ")") parentesis-exp)
@@ -118,3 +119,20 @@
     ))
 ;; ============================================================================
 
+;; ============================================================================
+; La función show-the-datatypes permite consultar las definiciones de tipos de datos
+; que corresponden a la gramática.
+
+(sllgen:make-define-datatypes scanner-spec-logicfusion gramatica-logicfusion)
+(define show-the-datatypes (lambda () (sllgen:list-define-datatypes scanner-spec-logicfusion gramatica-logicfusion)))
+
+;; ============================================================================
+(define scan&parse
+   (sllgen:make-string-parser
+     scanner-spec-logicfusion
+     gramatica-logicfusion))
+
+(define just-scan
+  (sllgen:make-string-scanner
+   scanner-spec-logicfusion
+   gramatica-logicfusion))
