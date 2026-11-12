@@ -90,34 +90,53 @@
 
 ; Nota: rhs = nombre de la especificación lexica si solo si esta definido en la léxica
 
-(define grammar-logicfusion
-  '((program ("GLOBALS" "{" (arbno definition) "}" 
-              "PROGRAM" "{" (arbno definition) "}") 
-             a-program)
+(define gramatica-logicfusion
+  '((programa ("GLOBALS" "{" (arbno definicion) "}" 
+              "PROGRAM" "{" (arbno definicion) "}") 
+             un-programa)
 
     ;; Definiciones (globales y locales)
-    (definition (type identifier "=" expression ";") var-def)
-    (definition ("const" type identifier "=" expression ";") const-def)
+    (definicion (tipo identificador "=" expresion ";") variable-deficion)
+    (definicion ("const" tipo identificador "=" expresion ";") constante-deficion)
 
     ;; Tipos (recursivos para list<T>, vector<T>, dict<T,U>)
-    (type ("int") int-type)
-    (type ("float") float-type)
-    (type ("string") string-type)
-    (type ("bool") bool-type)
-    (type ("void") void-type)
-    (type ("sat") sat-type)
-    (type ("list" "<" type ">") list-type)
-    (type ("vector" "<" type ">") vector-type)
-    (type ("dict" "<" type "," type ">") dict-type)
+    (tipo ("int") entero-tipo)
+    (tipo ("float") decimal-tipo)
+    (tipo ("string") cadena-tipo)
+    (tipo ("bool") booleano-tipo)
+    (tipo ("void") void-tipo)
+    (tipo ("sat") sat-tipo)
+    (tipo ("list" "<" tipo ">") lista-tipo)
+    (tipo ("vector" "<" tipo ">") vector-tipo)
+    (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
 
     ;; Expresiones base
-    (expression (number) int-lit)
-    (expression (float-lit) float-lit)
-    (expression (string-lit) string-lit)
-    (expression (identifier) var-exp)
-    (expression ("True") true-lit)
-    (expression ("False") false-lit)
-    (expression ("(" expression ")") paren-exp)
+    (expresion (number) entero-lit)
+    (expresion (float-lit) decimal-lit)
+    (expresion (string-lit) cadena-lit)
+    (expresion (identifier) variable-exp)
+    (expresion ("True") true-lit)
+    (expresion ("False") false-lit)
+    (expresion ("(" expresion ")") parentesis-exp)
+
+    ;; Expresiones aritméticas
+    (expresion-aritmetica ("+") suma)
+    (expresion-aritmetica ("~") resta)
+    (expresion-aritmetica ("/") division)
+    (expresion-aritmetica ("*") multiplicacion)
+    (expresion-aritmetica ("concat") concat)
+    (expresion-aritmetica (">") mayor)
+    (expresion-aritmetica ("<") menor)
+    (expresion-aritmetica (">=") mayor-igual)
+    (expresion-aritmetica ("<=") menor-igual)
+    (expresion-aritmetica ("!=") diferente)
+    (expresion-aritmetica ("==") igual)
+    
+    ; Primitiva Uninaria
+    (expresion-aritmetica ("longitud") longitud)
+    (expresion-aritmetica ("add1") add1)
+    (expresion-aritmetica ("sub1") sub1)
+    (expresion-aritmetica ("neg") negacion-booleana)
     ))
 ;*******************************************************************************************
 ;
