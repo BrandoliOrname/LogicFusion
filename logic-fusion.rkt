@@ -1,6 +1,4 @@
 #lang eopl
-<<<<<<< HEAD
-=======
 (require racket/string)
 
 
@@ -122,6 +120,4 @@
     (expression ("(" expression ")") paren-exp)
     ))
 ;*******************************************************************************************
-
 ;
->>>>>>> 289705b (feat: Agregar Especificación Sintáctica (Gramatica))
