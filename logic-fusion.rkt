@@ -1,57 +1,35 @@
 #lang eopl
 (require racket/string)
 
-
-;*******************************************************************************************
-; Interpretador
-
-;; La definición BNF para las expresiones del lenguaje:
+;; ============================================================================
+;; GRAMÁTICA BNF — LOGICFUSION
+;; ============================================================================
 ;;
-;;  <programa>          := <expresion>
-;;                         un-program (exp)
-;;  <expresion>         := <numero>
-;;                         numero-lit (num)
-;;                      := <texto>
-;;                         text-lit (txt)
-;;                      := <identificador>
-;;                         var-exp (id)
-;;                      := (<expresion> <primitiva-binaria> <expresion>)
-;;                         primapp-bin-exp (exp1 prim-binaria exp2)
-;;                      := <primitiva-unaria> (<expresion>)
-;;                         primapp-un-exp (prim-unaria exp)
-;;                      := si <expresion> {<expresion>} sino {<expresion>}
-;;                         condicional-exp
-;;                      := declarar (arbno <var-exp> = <exp> ;) {<exp>}
-;;                         variable-local-exp
-;;                      := procedimiento (separated-list <identificador> ,) {<exp>}
-;;                      := procedmiento-exp
-;;                      := evaluar
-;;                      := letrec {<identificador> [ {<identificador>}*(,) ] = <expresion> ;}* in <expresion> ;
-;;                         <letrec-exp proc-names idss bodies letrec-body>
+;; programa     ::= "GLOBALS" "{" { definicion } "}"
+;;                  "PROGRAM" "{" { definicion } "}"
+;;
+;; definicion   ::= tipo identificador "=" expresion ";"
+;;                | "const" tipo identificador "=" expresion ";"
+;;
+;; tipo         ::= "int" | "float" | "string" | "bool" | "void" | "sat"
+;;                | "list" "<" tipo ">"
+;;                | "vector" "<" tipo ">"
+;;                | "dict" "<" tipo "," tipo ">"
+;;
+;; expresion    ::= number | float-lit | string-lit | identifier
+;;                | "True" | "False"
+;;                | "(" expresion ")"
+;;
+;; expresion-aritmetica ::= "+" | "~" | "/" | "*" | "concat"
+;;                        | ">" | "<" | ">=" | "<=" | "!=" | "=="
+;;                        | "longitud" | "add1" | "sub1" | "neg"
+;;
+;; ============================================================================
 
-;                       Nota: los corchetes [ ] y los ; son terminales literales en el letrec, asi implementamos la recursion.
-
-;;  <primitiva-binaria> := + (primitiva-suma)
-;;                      := ~ (primitiva-resta)
-;;                      := / (primitiva-div)
-;;                      := * (primitiva-multi)
-;;                      := concat (primitiva-concat)
-;;                      := > (primitiva-mayor)
-;;                      := < (primitiva-menor)
-;;                      := >= (primitiva-mayor-igual)
-;;                      := <= (primitiva-menor-igual)
-;;                      := =! (primitiva-diferente)
-;;                      := == (primitiva-comparador-igual)
-
-;;  <primitiva-unaria>  := longitud (primitiva-longitud)
-;;                      := add1 (primitiva-add1)
-;;                      := sub1 (primitiva-sub1)
-;;                      := neg (primitiva-negacion-booleana)
-
-;*******************************************************************************************
+;; ============================================================================
 
 
-;*******************************************************************************************
+;; ============================================================================
 ; Especificación Léxica
 
 ; Instrucciones para crear la especificación léxica
@@ -74,9 +52,9 @@
     (texto ("\"" (arbno (not #\")) "\"") string) 
     ))
 
-;*******************************************************************************************
+;; ============================================================================
 
-;*******************************************************************************************
+;; ============================================================================
 ; Especificacion Sintáctica (Gramatica)
 
 ; Instrucciones para crear la especificación sintática
@@ -138,5 +116,5 @@
     (expresion-aritmetica ("sub1") sub1)
     (expresion-aritmetica ("neg") negacion-booleana)
     ))
-;*******************************************************************************************
-;
+;; ============================================================================
+
