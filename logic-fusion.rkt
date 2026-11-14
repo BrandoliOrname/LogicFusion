@@ -85,7 +85,9 @@
     (tipo ("bool") booleano-tipo)
     (tipo ("void") void-tipo)
     (tipo ("sat") sat-tipo)
-    (tipo ("proc") proc-tipo)
+    (tipo ("proc" identificador "=" "lambda" "(" tipo identificador ")"
+                  "{" "return" expresion "}")
+          proc-tipo)
     (tipo ("list" "<" tipo ">") lista-tipo)
     (tipo ("vector" "<" tipo ">") vector-tipo)
     (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
