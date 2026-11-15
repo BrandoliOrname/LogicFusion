@@ -142,6 +142,11 @@
 ;; ============================================================================
 
 (define-datatype ambiente ambiente?
-  (ambiente-vacio))
+  (ambiente-vacio)
+  (ambiente-expendido (tipos vector?)
+                      (simbolos (list-of symbol?))
+                      (valores vector?)
+                      (es-const vector?)
+                      (amb ambiente?)))
 
 ;; ============================================================================
