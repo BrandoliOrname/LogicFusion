@@ -122,7 +122,6 @@
     (expresion-aritmetica ("sub1") sub1)
     (expresion-aritmetica ("neg") negacion-booleana)
     ))
-;; ============================================================================
 
 ;; ============================================================================
 ; La función show-the-datatypes permite consultar las definiciones de tipos de datos
@@ -141,3 +140,38 @@
   (sllgen:make-string-scanner
    scanner-spec-logicfusion
    gramatica-logicfusion))
+;; ============================================================================
+
+;; ============================================================================
+;; INTERPRETADOR
+;; ============================================================================
+
+(define evaluar-programa
+  (lambda (pgm)
+    (cases programa pgm
+      (un-programa (globales locales)
+                   (let* ((ambiente-globales (evaluar-definicion globales (ambiente-vacio)))
+                          (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
+                   ambiente-vacio)))))
+
+(define evaluar-definicion
+  (lambda (def ambiente)
+    (cases expresion def
+      (numero-lit (n) n)
+      ;; faltan los demas casos
+      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
+;; ============================================================================
+
+;; ============================================================================
+;; AMBIENTES
+;; ============================================================================
+
+(define-datatype ambiente ambiente?
+  (ambiente-vacio)
+  (ambiente-expendido (tipos vector?)
+                      (simbolos (list-of symbol?))
+                      (valores vector?)
+                      (es-const vector?)
+                      (amb ambiente?)))
+
+;; ============================================================================
