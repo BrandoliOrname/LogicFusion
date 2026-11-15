@@ -11,7 +11,8 @@
 ;; definicion   ::= tipo identificador "=" expresion ";"
 ;;                | "const" tipo identificador "=" expresion ";"
 ;;
-;; tipo         ::= "int" | "float" | "string" | "bool" | "void" | "sat"
+;; tipo         ::= "int" | "float" | "string" | "bool" | "void" | "sat" 
+;;                | "proc" < nombre > = "lambda" "(" < tipos >< parametros > ")" "{" "return" < cuerpo > "}"
 ;;                | "list" "<" tipo ">"
 ;;                | "vector" "<" tipo ">"
 ;;                | "dict" "<" tipo "," tipo ">"
@@ -23,6 +24,7 @@
 ;; expresion-aritmetica ::= "+" | "~" | "/" | "*" | "concat"
 ;;                        | ">" | "<" | ">=" | "<=" | "!=" | "=="
 ;;                        | "longitud" | "add1" | "sub1" | "neg"
+
 ;;
 ;; ============================================================================
 
@@ -72,9 +74,9 @@
               "PROGRAM" "{" (arbno definicion) "}") 
              un-programa)
 
-    ;; Definiciones (globales y locales)
-    (definicion (tipo identificador "=" expresion ";") variable-deficion)
-    (definicion ("const" tipo identificador "=" expresion ";") constante-deficion)
+    ;; Definiciones (Variables y constantes)
+    (definicion (tipo identificador "=" expresion ";") variable-definicion)
+    (definicion ("const" tipo identificador "=" expresion ";") constante-definicion)
 
     ;; Tipos (recursivos para list<T>, vector<T>, dict<T,U>)
     (tipo ("int") entero-tipo)
@@ -83,6 +85,9 @@
     (tipo ("bool") booleano-tipo)
     (tipo ("void") void-tipo)
     (tipo ("sat") sat-tipo)
+    (tipo ("proc" identificador "=" "lambda" "(" tipo identificador ")"
+                  "{" "return" expresion "}")
+          proc-tipo)
     (tipo ("list" "<" tipo ">") lista-tipo)
     (tipo ("vector" "<" tipo ">") vector-tipo)
     (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
