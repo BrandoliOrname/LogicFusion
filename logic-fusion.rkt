@@ -163,6 +163,37 @@
 ;; ============================================================================
 
 ;; ============================================================================
+;; REFERENCIAS
+;; ============================================================================
+
+; tipo de dato
+(define-datatype referencia referencia?
+  (a-ref (posicion integer?)
+         (vector vector?)))
+
+; leer una referencia
+(define deref
+  (lambda (ref)
+    (primitiva-deref ref)))
+
+(define primitiva-deref
+  (lambda (ref)
+    (cases referencia ref
+      (a-ref (posicion vector)
+             (vector-ref vector posicion)))))
+
+; mutar una referencia -> Paso por valor
+(define setref!
+  (lambda (ref val)
+    (primitiva-setref ref val)))
+
+(define primitiva-setref
+  (lambda (ref val)
+    (cases referencia ref
+      (a-ref (posicion vector)
+             (vector-set! vector posicion val)))))
+
+;; ============================================================================
 ;; AMBIENTES
 ;; ============================================================================
 
