@@ -199,12 +199,23 @@
 
 (define-datatype ambiente ambiente?
   (ambiente-vacio)
-  (ambiente-expendido (tipos vector?)
+  (ambiente-extendido (tipos vector?)
                       (simbolos (list-of symbol?))
                       (valores vector?)
                       (es-const vector?)
                       (amb ambiente?)))
 
+(define aplicar-ambiente-referencia
+  (lambda (amb simbolo)
+    (cases ambiente amb
+      (ambiente-vacio ()
+          (eopl:error 'aplicar-ambiente-referencia "No esta ligada para ~s" simbolo))
+      (ambiente-extendido (tipos simbolos valores es-const amb)
+          (let ((posicion (rib-find-position simbolo simbolos)))
+            (if (number? posicion)
+                (a-ref posicion valores)
+                (aplicar-ambiente-referencia amb simbolo)))))))
+       
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
 ;; ============================================================================
@@ -228,3 +239,8 @@
 (define list-find-position
   (lambda (sym los)
     (list-index (lambda (s) (eqv? s sym)) los)))
+
+; to-do: descripcion de la funcion 
+(define rib-find-position 
+  (lambda (sym los)
+    (list-find-position sym los)))
