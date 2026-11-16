@@ -175,3 +175,25 @@
                       (amb ambiente?)))
 
 ;; ============================================================================
+;; FUNCIONES AUXILIARES
+;; ============================================================================
+
+; list-index:
+; Proposito:
+; P x L -> N o #f : retorna la posición (desde 0) del primer elemento de L que
+; cumple el predicado P, o #f si ninguno lo cumple.
+(define list-index
+  (lambda (pred ls)
+    (cond
+      ((null? ls) #f)
+      ((pred (car ls)) 0)
+      (else (let ((resto (list-index pred (cdr ls))))
+              (if (number? resto) (+ resto 1) #f))))))
+
+; list-find-position:
+; Proposito:
+; Sym x L -> N o #f : retorna la posición (desde 0) del símbolo en la lista de
+; símbolos, o #f si no está.
+(define list-find-position
+  (lambda (sym los)
+    (list-index (lambda (s) (eqv? s sym)) los)))
