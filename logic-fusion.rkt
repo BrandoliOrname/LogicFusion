@@ -154,6 +154,19 @@
                           (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
                    ambiente-vacio)))))
 
+;esta solo recorre la lista de las defs pero invoca a la fn importante evaluar-definicion
+(define recorrer-lista-definicion
+  (lambda (defs amb)
+    (if (null? defs) amb
+        ;sino, llamado recursivo a la fn, con el cuerpo de la lista de defs, y el ambiente nuevo generado en evaluar-definicion
+        (recorrer-lista-definicion (cdr defs) (evaluar-definicion (car defs) amb))
+    ) 
+  )
+ )
+
+;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
+; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
+;(se requiere crear la funcion de evaluar-tipos y hacer unas comparaciones)
 (define evaluar-definicion
   (lambda (def ambiente)
     (cases expresion def
