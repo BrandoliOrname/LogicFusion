@@ -175,6 +175,8 @@
 ;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
 ; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
 ;(se requiere crear la funcion de evaluar-tipos y hacer unas comparaciones)
+
+;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
 (define evaluar-definicion
   (lambda (def ambiente)
     (cases definicion def
