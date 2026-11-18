@@ -140,26 +140,75 @@
   (sllgen:make-string-scanner
    scanner-spec-logicfusion
    gramatica-logicfusion))
+
+
+
 ;; ============================================================================
 
 ;; ============================================================================
 ;; INTERPRETADOR
 ;; ============================================================================
 
-(define evaluar-programa
-  (lambda (pgm)
+;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
+;es por ello que usamos ambos en cases
+(define evaluar-programa ;creo que ya esta
+  (lambda(pgm)
     (cases programa pgm
-      (un-programa (globales locales)
-                   (let* ((ambiente-globales (evaluar-definicion globales (ambiente-vacio)))
-                          (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
-                   ambiente-vacio)))))
+      (un-programa (global-defs program-defs)
+                   (let* ((ambiente-nuevo (recorrer-lista-definicion global-defs (ambiente-vacio))))
+                          (recorrer-lista-definicion program-defs ambiente-nuevo))    
+        )
+      )
+    )
+  )
 
+;esta solo recorre la lista de las defs pero invoca a la fn importante evaluar-definicion
+(define recorrer-lista-definicion
+  (lambda (defs amb)
+    (if (null? defs) amb
+        ;sino, llamado recursivo a la fn, con el cuerpo de la lista de defs, y el ambiente nuevo generado en evaluar-definicion
+        (recorrer-lista-definicion (cdr defs) (evaluar-definicion (car defs) amb))
+    ) 
+  )
+ )
+
+;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
+; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
+;(se requiere crear la funcion de evaluar-tipos y hacer unas comparaciones)
+
+;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
 (define evaluar-definicion
   (lambda (def ambiente)
-    (cases expresion def
-      (numero-lit (n) n)
-      ;; faltan los demas casos
-      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
+    (cases definicion def
+      (variable-definicion (tipo identificador expresion)
+                            (ambiente-extendido
+                             (vector tipo)
+                             (list identificador)
+                             (vector (evaluar-expresion expresion ambiente))
+                             (vector #f)
+                             ambiente))
+      
+      (constante-definicion (tipo identificador expresion)
+                             (ambiente-extendido
+                              (vector tipo)
+                              (list identificador)
+                              (vector (evaluar-expresion expresion ambiente))
+                              (vector #t)
+                              ambiente))
+     )
+    )
+  )
+
+(define evaluar-expresion
+  (lambda (exp amb)
+    (cases expresion exp
+      (numero-lit (n) n) ;funciona
+      (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
+      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
+    )
+  )
+)
+
 ;; ============================================================================
 
 ;; ============================================================================
@@ -215,6 +264,12 @@
             (if (number? posicion)
                 (a-ref posicion valores)
                 (aplicar-ambiente-referencia amb simbolo)))))))
+
+(define aplicar-ambiente
+  (lambda (amb simbolo)
+    (deref (aplicar-ambiente-referencia amb simbolo))
+    )
+  )
        
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
@@ -244,3 +299,15 @@
 (define rib-find-position 
   (lambda (sym los)
     (list-find-position sym los)))
+
+
+
+
+;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
+(define logicfusion-interpretador 
+  (sllgen:make-rep-loop  "-->" evaluar-programa
+                         (sllgen:make-stream-parser
+                          scanner-spec-logicfusion
+                          gramatica-logicfusion)))
+
+(logicfusion-interpretador)
