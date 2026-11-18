@@ -146,15 +146,6 @@
 ;; INTERPRETADOR
 ;; ============================================================================
 
-;(define evaluar-programa
-;  (lambda (pgm)
-;    (cases programa pgm
-;      (un-programa (globales locales)
-;                   (let* ((ambiente-globales (evaluar-definicion globales (ambiente-vacio)))
-;                          (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
-;                   ambiente-vacio)))))
-
-
 ;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
 ;es por ello que usamos ambos en cases
 (define evaluar-programa ;creo que ya esta
@@ -211,10 +202,6 @@
     )
   )
 )
-
-
-;todavia faltan las funciones de evaluar-expresion, aplicar-primitiva y evaluar-tipo 
-
 
 ;; ============================================================================
 
