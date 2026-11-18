@@ -140,6 +140,9 @@
   (sllgen:make-string-scanner
    scanner-spec-logicfusion
    gramatica-logicfusion))
+
+
+
 ;; ============================================================================
 
 ;; ============================================================================
@@ -197,7 +200,8 @@
 (define evaluar-expresion
   (lambda (exp amb)
     (cases expresion exp
-      (numero-lit(n) n)
+      (numero-lit (n) n) ;funciona
+      (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
       (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
     )
   )
@@ -258,6 +262,12 @@
             (if (number? posicion)
                 (a-ref posicion valores)
                 (aplicar-ambiente-referencia amb simbolo)))))))
+
+(define aplicar-ambiente
+  (lambda (amb simbolo)
+    (deref (aplicar-ambiente-referencia amb simbolo))
+    )
+  )
        
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
@@ -287,3 +297,15 @@
 (define rib-find-position 
   (lambda (sym los)
     (list-find-position sym los)))
+
+
+
+
+;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
+(define logicfusion-interpretador 
+  (sllgen:make-rep-loop  "-->" evaluar-programa
+                         (sllgen:make-stream-parser
+                          scanner-spec-logicfusion
+                          gramatica-logicfusion)))
+
+(logicfusion-interpretador)
