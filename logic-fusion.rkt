@@ -146,13 +146,27 @@
 ;; INTERPRETADOR
 ;; ============================================================================
 
-(define evaluar-programa
-  (lambda (pgm)
+;(define evaluar-programa
+;  (lambda (pgm)
+;    (cases programa pgm
+;      (un-programa (globales locales)
+;                   (let* ((ambiente-globales (evaluar-definicion globales (ambiente-vacio)))
+;                          (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
+;                   ambiente-vacio)))))
+
+
+;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
+;es por ello que usamos ambos en cases
+(define evaluar-programa ;creo que ya esta
+  (lambda(pgm)
     (cases programa pgm
-      (un-programa (globales locales)
-                   (let* ((ambiente-globales (evaluar-definicion globales (ambiente-vacio)))
-                          (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
-                   ambiente-vacio)))))
+      (un-programa (global-defs program-defs)
+                   (let* ((ambiente-nuevo (recorrer-lista-definicion global-defs (ambiente-vacio))))
+                          (recorrer-lista-definicion program-defs ambiente-nuevo))    
+        )
+      )
+    )
+  )
 
 ;esta solo recorre la lista de las defs pero invoca a la fn importante evaluar-definicion
 (define recorrer-lista-definicion
