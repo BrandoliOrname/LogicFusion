@@ -169,10 +169,39 @@
 ;(se requiere crear la funcion de evaluar-tipos y hacer unas comparaciones)
 (define evaluar-definicion
   (lambda (def ambiente)
-    (cases expresion def
-      (numero-lit (n) n)
-      ;; faltan los demas casos
-      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
+    (cases definicion def
+      (variable-definicion (tipo identificador expresion)
+                            (ambiente-extendido
+                             (vector tipo)
+                             (list identificador)
+                             (vector (evaluar-expresion expresion ambiente))
+                             (vector #f)
+                             ambiente))
+      
+      (constante-definicion (tipo identificador expresion)
+                             (ambiente-extendido
+                              (vector tipo)
+                              (list identificador)
+                              (vector (evaluar-expresion expresion ambiente))
+                              (vector #t)
+                              ambiente))
+     )
+    )
+  )
+
+(define evaluar-expresion
+  (lambda (exp amb)
+    (cases expresion exp
+      (numero-lit(n) n)
+      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
+    )
+  )
+)
+
+
+;todavia faltan las funciones de evaluar-expresion, aplicar-primitiva y evaluar-tipo 
+
+
 ;; ============================================================================
 
 ;; ============================================================================
