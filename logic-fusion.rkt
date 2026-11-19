@@ -151,6 +151,7 @@
 
 ;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
 ;es por ello que usamos ambos en cases
+;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
 (define evaluar-programa ;creo que ya esta
   (lambda(pgm)
     (cases programa pgm
@@ -174,9 +175,7 @@
 
 ;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
 ; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
-;(se requiere crear la funcion de evaluar-tipos y hacer unas comparaciones)
-
-;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
+;(se requiere crear la funcion de validar-tipos y hacer unas comparaciones)
 (define evaluar-definicion
   (lambda (def ambiente)
     (cases definicion def
@@ -204,7 +203,7 @@
     (cases expresion exp
       (numero-lit (n) n) ;funciona
       (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
-      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
+      (else (eopl:error 'evaluar-expresion "expresión no soportada: ~s" exp))
     )
   )
 )
