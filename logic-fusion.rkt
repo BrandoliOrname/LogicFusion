@@ -106,7 +106,13 @@
     (expresion ("make-list" "(" expresion  "," expresion ")" ) crear-lista)
 
     ; 4. list?(x)
-    (expresion ("list?" "(" expresion ")" ) lista-predicado) 
+    (expresion ("list?" "(" expresion ")" ) lista-predicado)
+
+    ; 5. head(lst)
+    (expresion ("head" "(" expresion ")" ) cabeza-lista)
+
+    ; 6. tail(lst)
+    (expresion ("tail" "(" expresion ")" ) cola-lista)
                             
     
     
@@ -196,12 +202,25 @@
       (crear-lista (elemento lista)
                    (let ((cabeza (evaluar-definicion elemento ambiente))
                          (cola (evaluar-definicion lista ambiente)))
-                     (cons elemento lista)))
+                     (cons cabeza cola)))
 
       ; 4. list?(x)
       (lista-predicado (list)
                        (list? (evaluar-definicion list ambiente)))
-      
+
+      ; 5. head(lst)
+      (cabeza-lista (list)
+                    (let ((cabeza (evaluar-definicion list ambiente)))
+                      (if (null? cabeza)
+                          (eopl:error 'cabeza-lista "cabeza de la lista vacia")
+                          (car cabeza))))
+
+      ; 6. tail(lst)
+      (cola-lista (list)
+                  (let ((cola (evaluar-definicion list ambiente)))
+                    (if (null? cola)
+                        (eopl:error 'cola-lista "cola de la lista vacia")
+                        (cdr cola))))
       
       (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
 ;; ============================================================================
