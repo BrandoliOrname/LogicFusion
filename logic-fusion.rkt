@@ -179,7 +179,9 @@
   (lambda (def ambiente)
     (cases expresion def
       (numero-lit (n) n)
-      (variable-exp (s) s)
+      (variable-exp (id) (evaluar-definicion id ambiente))
+      (cadena-lit (s) s)
+      
       ;; faltan los demas casos
 
       ;; Adendo - lista
