@@ -173,10 +173,13 @@
                           (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
                    ambiente-vacio)))))
 
+;; ===========================================================================
+
 (define evaluar-definicion
   (lambda (def ambiente)
     (cases expresion def
       (numero-lit (n) n)
+      (variable-exp (s) s)
       ;; faltan los demas casos
 
       ;; Adendo - lista
@@ -283,3 +286,13 @@
 (define rib-find-position 
   (lambda (sym los)
     (list-find-position sym los)))
+
+;; ============================================================================
+;; INICIAR PROGRAMA
+;; ============================================================================
+
+(define interpretador 
+  (sllgen:make-rep-loop  "-->" evaluar-programa
+                         (sllgen:make-stream-parser
+                                  scanner-spec-logicfusion 
+                                  gramatica-logicfusion)))
