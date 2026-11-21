@@ -102,7 +102,11 @@
     ; 2. empty? (lst)
     (expresion ("empty?" "(" expresion ")") lista-predicado)
 
+    ; 3. make-list(elem, lst)
+    (expresion ("make-list" "(" expresion  "," expresion ")" ) crear-lista)
+
     
+                            
     
     
 
@@ -181,6 +185,11 @@
       ; 2. emtpy?(lst)
       (lista-predicado (exp) (if (list? exp) #t #f))
 
+      ; 3. make-list
+      (crear-lista (elemento lista)
+                   (let ((cabeza (evaluar-definicion elemento ambiente))
+                         (cola (evaluar-definicion lista ambiente)))
+                     (cons elemento lista)))          
       
       (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
 ;; ============================================================================
