@@ -300,8 +300,13 @@
       (ambiente-extendido (tipos simbolos valores es-const amb)
           (let ((posicion (rib-find-position simbolo simbolos)))
             (if (number? posicion)
-                (a-ref posicion valores)
+                (a-ref posicion valores)  ; <- construimos la referencia  (pos, vector)
                 (aplicar-ambiente-referencia amb simbolo)))))))
+
+(define aplicar-ambiente
+  (lambda (amb simbolo)
+    (deref (aplicar-ambiente-referencia amb simbolo)))) ; desreferencia para obtener el valor
+
 
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
