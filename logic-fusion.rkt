@@ -49,7 +49,7 @@
     (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)  
     (entero-positivo (digit (arbno digit)) number)
     (entero-negativo ("-" digit (arbno digit)) number)
-    (identificador (letter (arbno (or letter digit "?"))) symbol)        
+    (identificador (letter (arbno (or letter digit "?" "-"))) symbol)        
     (texto ("\"" (arbno (not #\")) "\"") string) 
     ))
 ;; ============================================================================
@@ -113,9 +113,15 @@
 
     ; 6. tail(lst)
     (expresion ("tail" "(" expresion ")" ) cola-lista)
-                            
-    
-    
+
+    ; 7. append(lst1, lst2)
+    (expresion ("append" "(" expresion "," expresion ")" ) concatenar-listas)
+
+    ; 8. ref-list(lst, pos)
+    (expresion ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
+
+    ; 9. lenght(lst)
+    (expresion ("length" "(" expresion ")" ) longitud-lista)
 
     ;; Expresiones base => Especificación Léxica
     (expresion (entero-negativo) numero-lit)
@@ -142,7 +148,7 @@
     (expresion-aritmetica ("==") igual)
     
     ; Primitiva Uninaria
-    (expresion-aritmetica ("longitud") longitud)
+    (expresion-aritmetica ("longitud") longitud-string)
     (expresion-aritmetica ("add1") add1)
     (expresion-aritmetica ("sub1") sub1)
     (expresion-aritmetica ("neg") negacion-booleana)
@@ -195,8 +201,8 @@
       (lista-vacia () '())
 
       ; 2. emtpy?(lst)
-      (vacio-predicado (list)
-                       (null? (evaluar-definicion list ambiente)))
+      (vacio-predicado (lista)
+                       (null? (evaluar-definicion lista ambiente)))
 
       ; 3. make-list
       (crear-lista (elemento lista)
@@ -205,22 +211,40 @@
                      (cons cabeza cola)))
 
       ; 4. list?(x)
-      (lista-predicado (list)
-                       (list? (evaluar-definicion list ambiente)))
+      (lista-predicado (lista)
+                       (list? (evaluar-definicion lista ambiente)))
 
       ; 5. head(lst)
-      (cabeza-lista (list)
-                    (let ((cabeza (evaluar-definicion list ambiente)))
+      (cabeza-lista (lista)
+                    (let ((cabeza (evaluar-definicion lista ambiente)))
                       (if (null? cabeza)
                           (eopl:error 'cabeza-lista "cabeza de la lista vacia")
                           (car cabeza))))
 
       ; 6. tail(lst)
-      (cola-lista (list)
-                  (let ((cola (evaluar-definicion list ambiente)))
+      (cola-lista (lista)
+                  (let ((cola (evaluar-definicion lista ambiente)))
                     (if (null? cola)
                         (eopl:error 'cola-lista "cola de la lista vacia")
                         (cdr cola))))
+
+      ; 7. append(lst1, lst2)
+      (concatenar-listas (list1 list2)
+                         (let ((l1 (evaluar-definicion list1 ambiente))
+                               (l2 (evaluar-definicion list2 ambiente)))
+                           (append l1 l2)))
+
+      ; 8. ref-list(lst, pos)
+      (referencia-lista (lista posicion)
+                        (let ((l (evaluar-definicion lista ambiente))
+                              (p (evaluar-definicion posicion ambiente)))
+                          (if (or (< p 0) (>= p (length l)))
+                              (eopl:error 'referencia-lista "posición fuera de rango: ~s" p)
+                              (list-ref l p))))
+     ; 9. lenght(lst)
+      (longitud-lista (lista)
+                      (let ((l (evaluar-definicion lista ambiente)))
+                        (length l)))
       
       (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
 ;; ============================================================================
