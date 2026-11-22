@@ -79,7 +79,7 @@
     ;; Definiciones (Variables y constantes)
     (definicion (tipo identificador "=" expresion ";") variable-definicion)
     (definicion ("const" tipo identificador "=" expresion ";") constante-definicion)
-
+    
     ;; Tipos (recursivos para list<T>, vector<T>, dict<T,U>)
     (tipo ("int") entero-tipo)
     (tipo ("float") decimal-tipo)
@@ -91,6 +91,8 @@
                   "{" "return" expresion "}")
           proc-tipo)
     (tipo ("list" "<" tipo ">") lista-tipo)
+    (expresion ("(" (separated-list expresion ",") ")") lista-de-valores)
+    
     (tipo ("vector" "<" tipo ">") vector-tipo)
     (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
 
@@ -130,7 +132,7 @@
     ;; Nota: se eliminó (expresion ("(" expresion ")") parentesis-exp) porque
     ;; SLLGEN exige gramática LL(1) y esa producción empieza igual que la
     ;; binaria. La agrupación ya la da la propia forma "( e1 op e2 )".
-    (expresion ("(" expresion primitiva-binaria expresion ")") primitiva-binaria-expresion)
+    ;(expresion ("(" expresion primitiva-binaria expresion ")") primitiva-binaria-expresion)
     (expresion (primitiva-unaria "(" expresion ")") primitiva-unaria-expresion)
 
     ;; Primitivas binarias
@@ -186,13 +188,18 @@
   (lambda(pgm)
     (cases programa pgm
       (un-programa (global-defs program-defs)
-                   (let* ((ambiente-nuevo (recorrer-lista-definicion global-defs (ambiente-vacio))))
-                          (recorrer-lista-definicion program-defs ambiente-nuevo))
-        )
-      )
-    )
-  )
+                   (let* ((ambiente-globales (recorrer-lista-definicion global-defs (ambiente-vacio)))
+                          (ambiente-final (recorrer-lista-definicion program-defs ambiente-globales)))
+                     (obtener-ultimo-valor ambiente-final))))))
 
+(define obtener-ultimo-valor
+  (lambda (amb)
+    (cases ambiente amb
+      (ambiente-vacio ()
+                      (eopl:error 'obtener-ultimo-valor "ambiente vacio"))
+      (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
+                          (deref (a-ref 0 valores))))))
+        
 ;esta solo recorre la lista de las defs pero invoca a la fn importante evaluar-definicion
 (define recorrer-lista-definicion
   (lambda (defs amb)
@@ -235,55 +242,49 @@
       (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
-      (primitiva-binaria-expresion (exp1 prim exp2)
-                                   (evaluar-primitiva-binaria prim
-                                                              (evaluar-expresion exp1 amb)
-                                                              (evaluar-expresion exp2 amb)))
+      ;(primitiva-binaria-expresion (exp1 prim exp2)
+      ;                             (evaluar-primitiva-binaria prim
+      ;                                                        (evaluar-expresion exp1 amb)
+      ;                                                        (evaluar-expresion exp2 amb)))
       (primitiva-unaria-expresion (prim operando)
                                   (evaluar-primitiva-unaria prim
                                                             (evaluar-expresion operando amb)))
+      (true-lit () #t)
+      (false-lit () #f)
+      (lista-de-valores (expresiones)
+                        (map (lambda (e) (evaluar-expresion e amb)) expresiones))
       ;; Expresiones de lista
-      ; 1. empty
       (lista-vacia () '())
-      ; 2. empty?(lst)
       (vacio-predicado (lista)
                        (null? (evaluar-expresion lista amb)))
-      ; 3. make-list(elem, lst)
       (crear-lista (elemento lista)
                    (let ((cabeza (evaluar-expresion elemento amb))
                          (cola (evaluar-expresion lista amb)))
                      (cons cabeza cola)))
-      ; 4. list?(lst)
       (lista-predicado (lista)
                        (list? (evaluar-expresion lista amb)))
-      ; 5. head(lst)
       (cabeza-lista (lista)
                     (let ((l (evaluar-expresion lista amb)))
                       (if (null? l)
                           (eopl:error 'cabeza-lista "cabeza de la lista vacia")
                           (car l))))
-      ; 6. tail(lst)
       (cola-lista (lista)
                   (let ((l (evaluar-expresion lista amb)))
                     (if (null? l)
                         (eopl:error 'cola-lista "cola de la lista vacia")
                         (cdr l))))
-      ; 7. append(lst1, lst2)
       (concatenar-listas (lista1 lista2)
                          (let ((l1 (evaluar-expresion lista1 amb))
                                (l2 (evaluar-expresion lista2 amb)))
                            (if (and (list? l1) (list? l2))
                                (append l1 l2)
                                (eopl:error 'concatenar-listas "Los parametros no son listas"))))
-                               
-      ; 8. ref-list(lst, pos)
       (referencia-lista (lista posicion)
                         (let ((l (evaluar-expresion lista amb))
                               (pos (evaluar-expresion posicion amb)))
                           (if (or (< pos 0) (>= pos (length l)))
                               (eopl:error 'referencia-lista "posicion fuera del rango ~s" pos)
                               (list-ref l pos))))
-      ; 9. length(lst)
       (longitud-lista (lista)
                       (let ((l (evaluar-expresion lista amb)))
                         (if (list? l)
@@ -297,6 +298,7 @@
   )
 )
 
+    
 ;; ============================================================================
 ;; PRIMITIVAS (Parte 1 - Brandon)
 ;; ============================================================================
@@ -551,6 +553,7 @@
     (deref (aplicar-ambiente-referencia amb simbolo))
     )
   )
+
 
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
