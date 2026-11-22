@@ -51,7 +51,7 @@
     (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (entero-positivo (digit (arbno digit)) number)
     (entero-negativo ("-" digit (arbno digit)) number)
-    (identificador (letter (arbno (or letter digit "?"))) symbol)
+    (identificador (letter (arbno (or letter digit "?" "-"))) symbol)
     (texto ("\"" (arbno (not #\")) "\"") string)
     ))
 ;; ============================================================================
@@ -103,6 +103,28 @@
     (expresion (identificador) variable-exp)
     (expresion ("True") true-lit)
     (expresion ("False") false-lit)
+
+    ;; Expresiones de lista
+    ; 1. empty
+    (expresion ("empty") lista-vacia)
+    ; 2. empty?(lst)
+    (expresion ("empty?" "(" expresion ")") vacio-predicado)
+    ; 3. make-list(elem, lst)
+    (expresion ("make-list" "(" expresion "," expresion ")" ) crear-lista)
+    ; 4. list?(lst)
+    (expresion ("list?" "(" expresion ")" ) lista-predicado)
+    ; 5. head(lst) 
+    (expresion ("head" "(" expresion ")" ) cabeza-lista)
+    ; 6. tail(lst)
+    (expresion ("tail" "(" expresion ")" ) cola-lista)
+    ; 7. append(lst1, lst2)
+    (expresion ("append" "(" expresion "," expresion ")" ) concatenar-listas)
+    ; 8. ref-list(lst, pos)
+    (expresion ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
+    ; 9. length(lst)
+    (expresion ("length" "(" expresion ")" ) longitud-lista)
+    
+    
     ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
     ;; la unaria va prefija con su operando entre paréntesis.
     ;; Nota: se eliminó (expresion ("(" expresion ")") parentesis-exp) porque
@@ -220,6 +242,56 @@
       (primitiva-unaria-expresion (prim operando)
                                   (evaluar-primitiva-unaria prim
                                                             (evaluar-expresion operando amb)))
+      ;; Expresiones de lista
+      ; 1. empty
+      (lista-vacia () '())
+      ; 2. empty?(lst)
+      (vacio-predicado (lista)
+                       (null? (evaluar-expresion lista amb)))
+      ; 3. make-list(elem, lst)
+      (crear-lista (elemento lista)
+                   (let ((cabeza (evaluar-expresion elemento amb))
+                         (cola (evaluar-expresion lista amb)))
+                     (cons cabeza cola)))
+      ; 4. list?(lst)
+      (lista-predicado (lista)
+                       (list? (evaluar-expresion lista amb)))
+      ; 5. head(lst)
+      (cabeza-lista (lista)
+                    (let ((l (evaluar-expresion lista amb)))
+                      (if (null? l)
+                          (eopl:error 'cabeza-lista "cabeza de la lista vacia")
+                          (car l))))
+      ; 6. tail(lst)
+      (cola-lista (lista)
+                  (let ((l (evaluar-expresion lista amb)))
+                    (if (null? l)
+                        (eopl:error 'cola-lista "cola de la lista vacia")
+                        (cdr l))))
+      ; 7. append(lst1, lst2)
+      (concatenar-listas (lista1 lista2)
+                         (let ((l1 (evaluar-expresion lista1 amb))
+                               (l2 (evaluar-expresion lista2 amb)))
+                           (if (and (list? l1) (list? l2))
+                               (append l1 l2)
+                               (eopl:error 'concatenar-listas "Los parametros no son listas"))))
+                               
+      ; 8. ref-list(lst, pos)
+      (referencia-lista (lista posicion)
+                        (let ((l (evaluar-expresion lista amb))
+                              (pos (evaluar-expresion posicion amb)))
+                          (if (or (< pos 0) (>= pos (length l)))
+                              (eopl:error 'referencia-lista "posicion fuera del rango ~s" pos)
+                              (list-ref l pos))))
+      ; 9. length(lst)
+      (longitud-lista (lista)
+                      (let ((l (evaluar-expresion lista amb)))
+                        (if (list? l)
+                            (length l)
+                            (eopl:error 'longitud-lista "No es una lista ~s" l))))
+      
+      
+                     
       (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
     )
   )
@@ -537,6 +609,37 @@
 ;; (scan&parse "GLOBALS { bool b = neg(True); } PROGRAM { }")          ; negacion-booleana
 ;; (scan&parse "GLOBALS { int a = add1(sub1((1 + 2))); } PROGRAM { }") ; anidadas
 
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE LISTAS
+;; (se dejan comentados para que no se ejecuten al cargar el archivo)
+;; ============================================================================
+
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> nums = empty; }")  ; lista vacia
+;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(empty); }")                ; True - lista vacia
+;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(make-list(1, empty)); }")  ; False - lista con elementos
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> nums = make-list(1, empty); }")                             ; (1)
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> nums = make-list(1, make-list(2, make-list(3, empty))); }") ; (1 2 3)
+;; (scan&parse "GLOBALS { } PROGRAM { bool b = list?(empty); }")                 ; True
+;; (scan&parse "GLOBALS { } PROGRAM { bool b = list?(make-list(1, empty)); }")   ; True
+;; (scan&parse "GLOBALS { } PROGRAM { bool b = list?(42); }")                    ; False
+;; (scan&parse "GLOBALS { } PROGRAM { int x = head(make-list(10, make-list(20, empty))); }") ; 10
+;; (scan&parse "GLOBALS { } PROGRAM { int x = head(empty); }")                               ; error: cabeza de lista vacia
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> t = tail(make-list(10, make-list(20, make-list(30, empty)))); }")          ; (20 30)
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> t = tail(empty); }")                                                       ; error: cola de lista vacia
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> ab = append(make-list(1, make-list(2, empty)), make-list(3, make-list(4, empty))); }") ; (1 2 3 4)
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> ab = append(empty, make-list(1, empty)); }")                               ; (1)
+;; (scan&parse "GLOBALS { } PROGRAM { list<int> ab = append(empty, empty); }")                                             ; ()
+;; (scan&parse "GLOBALS { } PROGRAM { int x = ref-list(make-list(10, make-list(20, make-list(30, empty))), 0); }")         ; 10
+;; (scan&parse "GLOBALS { } PROGRAM { int x = ref-list(make-list(10, make-list(20, make-list(30, empty))), 1); }")         ; 20
+;; (scan&parse "GLOBALS { } PROGRAM { int x = ref-list(make-list(10, make-list(20, make-list(30, empty))), 2); }")         ; 30
+;; (scan&parse "GLOBALS { } PROGRAM { int x = ref-list(make-list(10, empty), 5); }")                                       ; error: posicion fuera de rango
+;; (scan&parse "GLOBALS { } PROGRAM { int n = length(empty); }")                                                           ; 0
+;; (scan&parse "GLOBALS { } PROGRAM { int n = length(make-list(1, make-list(2, make-list(3, empty)))); }")                 ; 3
+
+;; Anidadas
+;; (scan&parse "GLOBALS { } PROGRAM { int x = head(tail(make-list(10, make-list(20, make-list(30, empty))))); }")          ; 20
+;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(tail(make-list(1, empty))); }")                                      ; True - tail de lista de un elemento es empty
+;; ============================================================================
 ;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
 (define logicfusion-interpretador
   (sllgen:make-rep-loop  "-->" evaluar-programa
@@ -544,4 +647,4 @@
                           scanner-spec-logicfusion
                           gramatica-logicfusion)))
 
-(logicfusion-interpretador)
+ (logicfusion-interpretador)
