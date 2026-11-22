@@ -11,7 +11,7 @@
 ;; definicion   ::= tipo identificador "=" expresion ";"
 ;;                | "const" tipo identificador "=" expresion ";"
 ;;
-;; tipo         ::= "int" | "float" | "string" | "bool" | "void" | "sat" 
+;; tipo         ::= "int" | "float" | "string" | "bool" | "void" | "sat"
 ;;                | "proc" < nombre > = "lambda" "(" < tipos >< parametros > ")" "{" "return" < cuerpo > "}"
 ;;                | "list" "<" tipo ">"
 ;;                | "vector" "<" tipo ">"
@@ -19,11 +19,13 @@
 ;;
 ;; expresion    ::= number | float-lit | string-lit | identifier
 ;;                | "True" | "False"
-;;                | "(" expresion ")"
+;;                | "(" expresion primitiva-binaria expresion ")"
+;;                | primitiva-unaria "(" expresion ")"
 ;;
-;; expresion-aritmetica ::= "+" | "~" | "/" | "*" | "concat"
-;;                        | ">" | "<" | ">=" | "<=" | "!=" | "=="
-;;                        | "longitud" | "add1" | "sub1" | "neg"
+;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
+;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
+;;
+;; primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
 
 ;;
 ;; ============================================================================
@@ -43,14 +45,14 @@
 ;; <salida>           := skip | symbol | number | string
 
 (define scanner-spec-logicfusion
-  '((espacio-blanco (whitespace) skip)                                   
-    (comentario ("%" (arbno (not #\newline))) skip)                      
+  '((espacio-blanco (whitespace) skip)
+    (comentario ("%" (arbno (not #\newline))) skip)
     (decimal-positivo (digit (arbno digit) "." digit (arbno digit)) number)
-    (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)  
+    (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (entero-positivo (digit (arbno digit)) number)
     (entero-negativo ("-" digit (arbno digit)) number)
-    (identificador (letter (arbno (or letter digit "?" "-"))) symbol)        
-    (texto ("\"" (arbno (not #\")) "\"") string) 
+    (identificador (letter (arbno (or letter digit "?"))) symbol)
+    (texto ("\"" (arbno (not #\")) "\"") string)
     ))
 ;; ============================================================================
 
@@ -70,8 +72,8 @@
 ;; Nota: rhs = nombre de la especificación lexica si solo si esta definido en la léxica
 
 (define gramatica-logicfusion
-  '((programa ("GLOBALS" "{" (arbno definicion) "}" 
-              "PROGRAM" "{" (arbno definicion) "}") 
+  '((programa ("GLOBALS" "{" (arbno definicion) "}"
+              "PROGRAM" "{" (arbno definicion) "}")
              un-programa)
 
     ;; Definiciones (Variables y constantes)
@@ -92,37 +94,6 @@
     (tipo ("vector" "<" tipo ">") vector-tipo)
     (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
 
-    ;; Lista de valores
-    (expresion ( "(" (separated-list expresion ",") ")") lista-de-valores)
-
-    ;; Adendo - Listas
-    ; 1. empty
-    (expresion ("empty") lista-vacia)
-
-    ; 2. empty? (lst)
-    (expresion ("empty?" "(" expresion ")") vacio-predicado)
-
-    ; 3. make-list(elem, lst)
-    (expresion ("make-list" "(" expresion  "," expresion ")" ) crear-lista)
-
-    ; 4. list?(x)
-    (expresion ("list?" "(" expresion ")" ) lista-predicado)
-
-    ; 5. head(lst)
-    (expresion ("head" "(" expresion ")" ) cabeza-lista)
-
-    ; 6. tail(lst)
-    (expresion ("tail" "(" expresion ")" ) cola-lista)
-
-    ; 7. append(lst1, lst2)
-    (expresion ("append" "(" expresion "," expresion ")" ) concatenar-listas)
-
-    ; 8. ref-list(lst, pos)
-    (expresion ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
-
-    ; 9. lenght(lst)
-    (expresion ("length" "(" expresion ")" ) longitud-lista)
-
     ;; Expresiones base => Especificación Léxica
     (expresion (entero-negativo) numero-lit)
     (expresion (entero-positivo) numero-lit)
@@ -132,26 +103,32 @@
     (expresion (identificador) variable-exp)
     (expresion ("True") true-lit)
     (expresion ("False") false-lit)
-    ;; (expresion ("(" expresion ")") parentesis-exp)
+    ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
+    ;; la unaria va prefija con su operando entre paréntesis.
+    ;; Nota: se eliminó (expresion ("(" expresion ")") parentesis-exp) porque
+    ;; SLLGEN exige gramática LL(1) y esa producción empieza igual que la
+    ;; binaria. La agrupación ya la da la propia forma "( e1 op e2 )".
+    (expresion ("(" expresion primitiva-binaria expresion ")") primitiva-binaria-expresion)
+    (expresion (primitiva-unaria "(" expresion ")") primitiva-unaria-expresion)
 
-    ;; Expresiones aritméticas
-    (expresion-aritmetica ("+") suma)
-    (expresion-aritmetica ("~") resta)
-    (expresion-aritmetica ("/") division)
-    (expresion-aritmetica ("*") multiplicacion)
-    (expresion-aritmetica ("concat") concat)
-    (expresion-aritmetica (">") mayor)
-    (expresion-aritmetica ("<") menor)
-    (expresion-aritmetica (">=") mayor-igual)
-    (expresion-aritmetica ("<=") menor-igual)
-    (expresion-aritmetica ("!=") diferente)
-    (expresion-aritmetica ("==") igual)
-    
-    ; Primitiva Uninaria
-    (expresion-aritmetica ("longitud") longitud-string)
-    (expresion-aritmetica ("add1") add1)
-    (expresion-aritmetica ("sub1") sub1)
-    (expresion-aritmetica ("neg") negacion-booleana)
+    ;; Primitivas binarias
+    (primitiva-binaria ("+") suma)
+    (primitiva-binaria ("~") resta)
+    (primitiva-binaria ("/") division)
+    (primitiva-binaria ("*") multiplicacion)
+    (primitiva-binaria ("concat") concat)
+    (primitiva-binaria (">") mayor)
+    (primitiva-binaria ("<") menor)
+    (primitiva-binaria (">=") mayor-igual)
+    (primitiva-binaria ("<=") menor-igual)
+    (primitiva-binaria ("!=") diferente)
+    (primitiva-binaria ("==") igual)
+
+    ;; Primitivas unarias
+    (primitiva-unaria ("longitud") longitud)
+    (primitiva-unaria ("add1") add1)
+    (primitiva-unaria ("sub1") sub1)
+    (primitiva-unaria ("neg") negacion-booleana)
     ))
 
 ;; ============================================================================
@@ -171,82 +148,276 @@
   (sllgen:make-string-scanner
    scanner-spec-logicfusion
    gramatica-logicfusion))
+
+
+
 ;; ============================================================================
 
 ;; ============================================================================
 ;; INTERPRETADOR
 ;; ============================================================================
 
-(define evaluar-programa
-  (lambda (pgm)
+;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
+;es por ello que usamos ambos en cases
+;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
+(define evaluar-programa ;creo que ya esta
+  (lambda(pgm)
     (cases programa pgm
-      (un-programa (globales locales)
-                   (let* ((ambiente-globales (evaluar-definicion globales (ambiente-vacio)))
-                          (ambiente-locales (evaluar-definicion locales (ambiente-globales))))
-                   ambiente-vacio)))))
+      (un-programa (global-defs program-defs)
+                   (let* ((ambiente-nuevo (recorrer-lista-definicion global-defs (ambiente-vacio))))
+                          (recorrer-lista-definicion program-defs ambiente-nuevo))
+        )
+      )
+    )
+  )
 
-;; ===========================================================================
+;esta solo recorre la lista de las defs pero invoca a la fn importante evaluar-definicion
+(define recorrer-lista-definicion
+  (lambda (defs amb)
+    (if (null? defs) amb
+        ;sino, llamado recursivo a la fn, con el cuerpo de la lista de defs, y el ambiente nuevo generado en evaluar-definicion
+        (recorrer-lista-definicion (cdr defs) (evaluar-definicion (car defs) amb))
+    )
+  )
+ )
 
+;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
+; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
+;(se requiere crear la funcion de validar-tipos y hacer unas comparaciones)
 (define evaluar-definicion
   (lambda (def ambiente)
-    (cases expresion def
-      (numero-lit (n) n)
-      (variable-exp (id) (evaluar-definicion id ambiente))
-      (cadena-lit (s) s)
-      
-      ;; faltan los demas casos
+    (cases definicion def
+      (variable-definicion (tipo identificador expresion)
+                            (ambiente-extendido
+                             (vector tipo)
+                             (list identificador)
+                             (vector (evaluar-expresion expresion ambiente))
+                             (vector #f)
+                             ambiente))
 
-      ;; Adendo - lista
-      ; 1. emtpy
-      (lista-vacia () '())
+      (constante-definicion (tipo identificador expresion)
+                             (ambiente-extendido
+                              (vector tipo)
+                              (list identificador)
+                              (vector (evaluar-expresion expresion ambiente))
+                              (vector #t)
+                              ambiente))
+     )
+    )
+  )
 
-      ; 2. emtpy?(lst)
-      (vacio-predicado (lista)
-                       (null? (evaluar-definicion lista ambiente)))
+(define evaluar-expresion
+  (lambda (exp amb)
+    (cases expresion exp
+      (numero-lit (n) n) ;funciona
+      (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
+      ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
+      ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
+      (primitiva-binaria-expresion (exp1 prim exp2)
+                                   (evaluar-primitiva-binaria prim
+                                                              (evaluar-expresion exp1 amb)
+                                                              (evaluar-expresion exp2 amb)))
+      (primitiva-unaria-expresion (prim operando)
+                                  (evaluar-primitiva-unaria prim
+                                                            (evaluar-expresion operando amb)))
+      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
+    )
+  )
+)
 
-      ; 3. make-list
-      (crear-lista (elemento lista)
-                   (let ((cabeza (evaluar-definicion elemento ambiente))
-                         (cola (evaluar-definicion lista ambiente)))
-                     (cons cabeza cola)))
+;; ============================================================================
+;; PRIMITIVAS (Parte 1 - Brandon)
+;; ============================================================================
+;; Base: evaluar-primitiva-binaria, evaluar-primitiva-unaria y condicional? de
+;; interpretador.txt, adaptadas a las reglas del enunciado de LogicFusion:
+;;   - +, ~, *, / operan sobre int y float.
+;;   - Las relacionales (==, !=, >, <, >=, <=) retornan bool (#t / #f) y
+;;     funcionan con int, float y bool.
+;;   - concat y longitud operan sobre cadenas.
+;;   - Si un operando no es del tipo esperado se lanza un error claro.
+;; Los valores son los de Racket: int = entero exacto, float = decimal,
+;; string = cadena, bool = #t / #f.
 
-      ; 4. list?(x)
-      (lista-predicado (lista)
-                       (list? (evaluar-definicion lista ambiente)))
+; evaluar-primitiva-binaria:
+; Proposito:
+; PB x V x V -> V : Procedimiento que recibe una primitiva binaria y los valores
+; ya evaluados de sus dos operandos, y retorna el resultado de aplicarla.
+; Suma, resta (~), multiplicacion y division operan sobre numeros; concat une
+; dos cadenas; las comparaciones delegan en condicional? y retornan #t o #f.
+;
+; Gramatica:
+;   <primitiva-binaria> := + (suma) | ~ (resta) | * (multiplicacion) | / (division)
+;                       := concat (concat)
+;                       := > (mayor) | < (menor) | >= (mayor-igual) | <= (menor-igual)
+;                       := != (diferente) | == (igual)
+(define evaluar-primitiva-binaria
+  (lambda (prim valor1 valor2)
+    (cases primitiva-binaria prim
+      (suma ()           (operar-numeros '+ + valor1 valor2))
+      (resta ()          (operar-numeros '~ - valor1 valor2))
+      (multiplicacion () (operar-numeros '* * valor1 valor2))
+      (division ()       (dividir valor1 valor2))
+      (concat ()         (concatenar valor1 valor2))
+      (mayor ()          (condicional? '>  valor1 valor2))
+      (menor ()          (condicional? '<  valor1 valor2))
+      (mayor-igual ()    (condicional? '>= valor1 valor2))
+      (menor-igual ()    (condicional? '<= valor1 valor2))
+      (diferente ()      (condicional? '!= valor1 valor2))
+      (igual ()          (condicional? '== valor1 valor2)))))
 
-      ; 5. head(lst)
-      (cabeza-lista (lista)
-                    (let ((cabeza (evaluar-definicion lista ambiente)))
-                      (if (null? cabeza)
-                          (eopl:error 'cabeza-lista "cabeza de la lista vacia")
-                          (car cabeza))))
+; evaluar-primitiva-unaria:
+; Proposito:
+; PU x V -> V : Procedimiento que recibe una primitiva unaria y el valor ya
+; evaluado de su operando, y retorna el resultado de aplicarla. longitud retorna
+; la cantidad de caracteres de una cadena; add1 y sub1 suman y restan 1 a un
+; numero (int o float); neg retorna la negacion booleana.
+;
+; Gramatica:
+;   <primitiva-unaria> := longitud (longitud) | add1 (add1) | sub1 (sub1)
+;                      := neg (negacion-booleana)
+(define evaluar-primitiva-unaria
+  (lambda (prim valor)
+    (cases primitiva-unaria prim
+      (longitud ()          (longitud-de-cadena valor))
+      (add1 ()              (operar-numero 'add1 (lambda (n) (+ n 1)) valor))
+      (sub1 ()              (operar-numero 'sub1 (lambda (n) (- n 1)) valor))
+      (negacion-booleana () (negar-valor valor)))))
 
-      ; 6. tail(lst)
-      (cola-lista (lista)
-                  (let ((cola (evaluar-definicion lista ambiente)))
-                    (if (null? cola)
-                        (eopl:error 'cola-lista "cola de la lista vacia")
-                        (cdr cola))))
+;; ----------------------------------------------------------------------------
+;; Auxiliares de las primitivas
+;; ----------------------------------------------------------------------------
+;; Nota: no se pueden llamar suma, resta, division, multiplicacion, concat,
+;; mayor, menor, mayor-igual, menor-igual, igual, diferente, longitud, add1,
+;; sub1 ni negacion-booleana porque ya son constructores de la gramática.
 
-      ; 7. append(lst1, lst2)
-      (concatenar-listas (list1 list2)
-                         (let ((l1 (evaluar-definicion list1 ambiente))
-                               (l2 (evaluar-definicion list2 ambiente)))
-                           (append l1 l2)))
+; operar-numeros:
+; Proposito:
+; Sym x Proc x V x V -> N : Procedimiento que recibe el simbolo de la primitiva
+; (solo para el mensaje de error), una operacion de Racket y dos valores. Si
+; ambos son numeros (int o float) retorna la operacion aplicada a ellos; si no,
+; lanza un error. Lo usan +, ~ y *.
+(define operar-numeros
+  (lambda (simbolo operacion valor1 valor2)
+    (if (and (number? valor1) (number? valor2))
+        (operacion valor1 valor2)
+        (eopl:error 'evaluar-primitiva-binaria
+                    "La primitiva ~s solo opera sobre int o float, se recibio: ~s y ~s"
+                    simbolo valor1 valor2))))
 
-      ; 8. ref-list(lst, pos)
-      (referencia-lista (lista posicion)
-                        (let ((l (evaluar-definicion lista ambiente))
-                              (p (evaluar-definicion posicion ambiente)))
-                          (if (or (< p 0) (>= p (length l)))
-                              (eopl:error 'referencia-lista "posición fuera de rango: ~s" p)
-                              (list-ref l p))))
-     ; 9. lenght(lst)
-      (longitud-lista (lista)
-                      (let ((l (evaluar-definicion lista ambiente)))
-                        (length l)))
-      
-      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp)))))
+; operar-numero:
+; Proposito:
+; Sym x Proc x V -> N : Version de operar-numeros para un solo operando. Lo usan
+; add1 y sub1.
+(define operar-numero
+  (lambda (simbolo operacion valor)
+    (if (number? valor)
+        (operacion valor)
+        (eopl:error 'evaluar-primitiva-unaria
+                    "La primitiva ~s solo opera sobre int o float, se recibio: ~s"
+                    simbolo valor))))
+
+; dividir:
+; Proposito:
+; V x V -> N : Procedimiento que divide dos numeros. Si ambos son enteros
+; retorna la division entera (int / int = int, como en C); si alguno es float
+; retorna la division decimal. Se usa quotient y no / porque en Racket
+; (/ 7 2) da la fraccion 7/2, que no es ni int ni float y romperia la
+; validacion de tipos. Si el divisor es cero lanza un error.
+(define dividir
+  (lambda (valor1 valor2)
+    (cond
+      ((not (and (number? valor1) (number? valor2)))
+       (eopl:error 'evaluar-primitiva-binaria
+                   "La primitiva / solo opera sobre int o float, se recibio: ~s y ~s"
+                   valor1 valor2))
+      ((zero? valor2)
+       (eopl:error 'evaluar-primitiva-binaria "Division por cero: ~s / ~s" valor1 valor2))
+      ((and (entero? valor1) (entero? valor2)) (quotient valor1 valor2))
+      (else (/ valor1 valor2)))))
+
+; entero?:
+; Proposito:
+; V -> B : Retorna #t si el valor es un entero exacto (int) y #f en otro caso
+; (por ejemplo 4.0 es float, no int).
+(define entero?
+  (lambda (valor)
+    (and (integer? valor) (exact? valor))))
+
+; concatenar:
+; Proposito:
+; V x V -> S : Procedimiento que une dos cadenas. Si algun operando no es una
+; cadena lanza un error.
+(define concatenar
+  (lambda (valor1 valor2)
+    (if (and (string? valor1) (string? valor2))
+        (string-append valor1 valor2)
+        (eopl:error 'evaluar-primitiva-binaria
+                    "La primitiva concat solo opera sobre string, se recibio: ~s y ~s"
+                    valor1 valor2))))
+
+; longitud-de-cadena:
+; Proposito:
+; V -> N : Retorna la cantidad de caracteres de una cadena. Si el valor no es
+; una cadena lanza un error.
+(define longitud-de-cadena
+  (lambda (valor)
+    (if (string? valor)
+        (string-length valor)
+        (eopl:error 'evaluar-primitiva-unaria
+                    "La primitiva longitud solo opera sobre string, se recibio: ~s"
+                    valor))))
+
+; negar-valor:
+; Proposito:
+; V -> B : Retorna la negacion booleana de un valor. Para un bool es #t <-> #f;
+; para un numero sigue la convencion del lenguaje (0 es falso, cualquier otro
+; valor es verdadero), asi que neg de 0 es #t y neg de cualquier otro numero
+; es #f. Cualquier otro valor lanza un error.
+(define negar-valor
+  (lambda (valor)
+    (cond
+      ((boolean? valor) (not valor))
+      ((number? valor) (zero? valor))
+      (else (eopl:error 'evaluar-primitiva-unaria
+                        "La primitiva neg solo opera sobre bool o numeros, se recibio: ~s"
+                        valor)))))
+
+; condicional?:
+; Proposito:
+; Sym x V x V -> B : Procedimiento que recibe el simbolo de un operador de
+; comparacion (>, <, >=, <=, != o ==) y dos valores, y retorna #t si la
+; comparacion se cumple y #f si no. Funciona con int, float y bool (False es
+; menor que True); no se pueden comparar valores de categorias distintas (por
+; ejemplo un int con un bool). Los numeros se comparan por valor, asi que
+; (1 == 1.0) es #t. Es la condicional? de interpretador.txt, pero comparando
+; directamente (sin restar los operandos) y retornando bool en vez de 1 / 0.
+(define condicional?
+  (lambda (operador valor1 valor2)
+    (cond
+      ((and (number? valor1) (number? valor2))
+       (comparar-numeros operador valor1 valor2))
+      ((and (boolean? valor1) (boolean? valor2))
+       (comparar-numeros operador (if valor1 1 0) (if valor2 1 0)))
+      (else
+       (eopl:error 'evaluar-primitiva-binaria
+                   "La primitiva ~s solo compara int, float o bool del mismo tipo, se recibio: ~s y ~s"
+                   operador valor1 valor2)))))
+
+; comparar-numeros:
+; Proposito:
+; Sym x N x N -> B : Aplica el operador de comparacion a dos numeros. Si el
+; operador no es soportado lanza un error.
+(define comparar-numeros
+  (lambda (operador n1 n2)
+    (cond
+      ((equal? '>  operador) (>  n1 n2))
+      ((equal? '<  operador) (<  n1 n2))
+      ((equal? '>= operador) (>= n1 n2))
+      ((equal? '<= operador) (<= n1 n2))
+      ((equal? '== operador) (=  n1 n2))
+      ((equal? '!= operador) (not (= n1 n2)))
+      (else (eopl:error 'condicional? "Operador no soportado ~s" operador)))))
+
 ;; ============================================================================
 
 ;; ============================================================================
@@ -300,13 +471,14 @@
       (ambiente-extendido (tipos simbolos valores es-const amb)
           (let ((posicion (rib-find-position simbolo simbolos)))
             (if (number? posicion)
-                (a-ref posicion valores)  ; <- construimos la referencia  (pos, vector)
+                (a-ref posicion valores)
                 (aplicar-ambiente-referencia amb simbolo)))))))
 
 (define aplicar-ambiente
   (lambda (amb simbolo)
-    (deref (aplicar-ambiente-referencia amb simbolo)))) ; desreferencia para obtener el valor
-
+    (deref (aplicar-ambiente-referencia amb simbolo))
+    )
+  )
 
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
@@ -332,17 +504,44 @@
   (lambda (sym los)
     (list-index (lambda (s) (eqv? s sym)) los)))
 
-; to-do: descripcion de la funcion 
-(define rib-find-position 
+; to-do: descripcion de la funcion
+(define rib-find-position
   (lambda (sym los)
     (list-find-position sym los)))
 
-;; ============================================================================
-;; INICIAR PROGRAMA
-;; ============================================================================
 
-(define interpretador 
+
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
+;; (se dejan comentados para que no se ejecuten al cargar el archivo)
+;; ============================================================================
+;; primitiva-binaria-expresion (una por cada primitiva binaria):
+;; (scan&parse "GLOBALS { int a = (5 + 3); } PROGRAM { }")             ; suma
+;; (scan&parse "GLOBALS { int a = (5 ~ 3); } PROGRAM { }")             ; resta
+;; (scan&parse "GLOBALS { int a = (5 * 3); } PROGRAM { }")             ; multiplicacion
+;; (scan&parse "GLOBALS { int a = (6 / 3); } PROGRAM { }")             ; division
+;; (scan&parse "GLOBALS { string s = (\"ho\" concat \"la\"); } PROGRAM { }") ; concat
+;; (scan&parse "GLOBALS { bool b = (5 > 3); } PROGRAM { }")            ; mayor
+;; (scan&parse "GLOBALS { bool b = (5 < 3); } PROGRAM { }")            ; menor
+;; (scan&parse "GLOBALS { bool b = (5 >= 3); } PROGRAM { }")           ; mayor-igual
+;; (scan&parse "GLOBALS { bool b = (5 <= 3); } PROGRAM { }")           ; menor-igual
+;; (scan&parse "GLOBALS { bool b = (5 != 3); } PROGRAM { }")           ; diferente
+;; (scan&parse "GLOBALS { bool b = (5 == 3); } PROGRAM { }")           ; igual
+;; (scan&parse "GLOBALS { int a = ((2 + 3) * (10 ~ 4)); } PROGRAM { }") ; anidadas
+;;
+;; primitiva-unaria-expresion (una por cada primitiva unaria):
+;; (scan&parse "GLOBALS { int n = longitud(\"hola\"); } PROGRAM { }")   ; longitud
+;; (scan&parse "GLOBALS { int a = add1(7); } PROGRAM { }")             ; add1
+;; (scan&parse "GLOBALS { int a = sub1(7); } PROGRAM { }")             ; sub1
+;; (scan&parse "GLOBALS { bool b = neg(True); } PROGRAM { }")          ; negacion-booleana
+;; (scan&parse "GLOBALS { int a = add1(sub1((1 + 2))); } PROGRAM { }") ; anidadas
+
+;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
+(define logicfusion-interpretador
   (sllgen:make-rep-loop  "-->" evaluar-programa
                          (sllgen:make-stream-parser
-                                  scanner-spec-logicfusion 
-                                  gramatica-logicfusion)))
+                          scanner-spec-logicfusion
+                          gramatica-logicfusion)))
+
+(logicfusion-interpretador)
