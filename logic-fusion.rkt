@@ -232,6 +232,9 @@
   (lambda (exp amb)
     (cases expresion exp
       (numero-lit (n) n) ;funciona
+      (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
+      (true-lit () #t)
+      (false-lit () #f)
       (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
@@ -292,7 +295,7 @@
       
       
                      
-      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
+      (else (eopl:error 'evaluar-expresion "expresión no soportada: ~s" exp))
     )
   )
 )
