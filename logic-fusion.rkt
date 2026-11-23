@@ -81,34 +81,42 @@
     ;; Definiciones (Variables y constantes)
     (definicion (tipo identificador "=" expresion ";") variable-definicion)
     (definicion ("const" tipo identificador "=" expresion ";") constante-definicion)
+
+    (tipo (tipo-primitivo) tipo-simple)
+    (tipo (tipo-compuesto) tipo-complejo)
     
-    ;; Tipos (recursivos para list<T>, vector<T>, dict<T,U>)
-    (tipo ("int") entero-tipo)
-    (tipo ("float") decimal-tipo)
-    (tipo ("string") cadena-tipo)
-    (tipo ("bool") booleano-tipo)
-    (tipo ("void") void-tipo)
-    (tipo ("sat") sat-tipo)
-    (tipo ("proc") proc-tipo)
-    (tipo ("list" "<" tipo ">") lista-tipo)
+    ;; Tipos Primitivos
+    (tipo-primitivo ("int") entero-tipo)
+    (tipo-primitivo ("float") decimal-tipo)
+    (tipo-primitivo ("string") cadena-tipo)
+    (tipo-primitivo ("bool") booleano-tipo)
+    (tipo-primitivo ("void") void-tipo)
+
+    ; Tipos Compuestos
+    (tipo-compuesto ("sat") sat-tipo)
+    (tipo-compuesto ("proc") proc-tipo)
+    (tipo-compuesto ("list" "<" tipo ">") lista-tipo)
+    (tipo-compuesto ("vector" "<" tipo ">") vector-tipo)
+    (tipo-compuesto ("dict" "<" tipo "," tipo ">") diccionario-tipo)
 
     (expresion ("(" expresion resto-de-parentesis ")") expresion-con-parentesis)
 
     (resto-de-parentesis (primitiva-binaria expresion) continuacion-binaria)
     (resto-de-parentesis ("," (separated-list expresion ",")) continuacion-lista)
     
-    (tipo ("vector" "<" tipo ">") vector-tipo)
-    (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
+
 
     ;; Expresiones base => Especificación Léxica
-    (expresion (entero-negativo) numero-lit)
-    (expresion (entero-positivo) numero-lit)
-    (expresion (decimal-negativo) numero-lit)
-    (expresion (decimal-positivo) numero-lit)
-    (expresion (texto) cadena-lit)
+    (expresion (dato-primitivo) dato-simple)
+    (dato-primitivo (entero-negativo) numero-lit)
+    (dato-primitivo (entero-positivo) numero-lit)
+    (dato-primitivo (decimal-negativo) numero-lit)
+    (dato-primitivo (decimal-positivo) numero-lit)
+    (dato-primitivo (texto) cadena-lit)
+    (dato-primitivo ("True") true-lit)
+    (dato-primitivo ("False") false-lit)
+
     (expresion (identificador) variable-exp)
-    (expresion ("True") true-lit)
-    (expresion ("False") false-lit)
 
     ;; Expresiones de lista
     ; 1. empty
@@ -246,34 +254,41 @@
 (define validar-tipo
   (lambda (tipo-dato valor)
     (cases tipo tipo-dato
-      (entero-tipo () (entero? valor)) ;reutilizamos un predicado de nosotros
-      (decimal-tipo () (real? valor)) ;para flotantes
-      (cadena-tipo () (string? valor))
-      (booleano-tipo () (boolean? valor))
-      (void-tipo () #t)
-      ;abajo iran los tipos compuestos
-      (else (eopl:error 'validar-tipo "tipo ~s no soportdado aun" tipo-dato)
-      )
-    )
-  )
-)
+      (tipo-simple (tp)
+        (cases tipo-primitivo tp
+          (entero-tipo () (entero? valor))
+          (decimal-tipo () (real? valor))
+          (cadena-tipo () (string? valor))
+          (booleano-tipo () (boolean? valor))
+          (void-tipo () #t)
+          (else (eopl:error 'validar-tipo "tipo primitivo ~s no soportado" tp))))
+      (tipo-complejo (tc)
+        (cases tipo-compuesto tc
+          (lista-tipo (t) (list? valor))
+          (vector-tipo (t) (vector? valor))
+          (else (eopl:error 'validar-tipo "tipo compuesto ~s no soportado" tc)))))))
+
+(define evaluar-dato-primitivo
+  (lambda (dato amb)
+    (cases dato-primitivo dato
+      (numero-lit (n) n)
+      (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
+      (true-lit () #t)
+      (false-lit () #f)
+    )))
 
 
 
 (define evaluar-expresion
   (lambda (exp amb)
     (cases expresion exp
-      (numero-lit (n) n)
-      (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
-      (true-lit () #t)
-      (false-lit () #f)
       (variable-exp (id) (aplicar-ambiente amb id))
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
       (primitiva-unaria-expresion (prim operando)
                                   (evaluar-primitiva-unaria prim
                                                             (evaluar-expresion operando amb)))
-
+      (dato-simple (dato) (evaluar-dato-primitivo dato amb))
       (expresion-con-parentesis (exp resto)
          (cases resto-de-parentesis resto
               (continuacion-binaria (op exp2)
