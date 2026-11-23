@@ -232,6 +232,9 @@
   (lambda (exp amb)
     (cases expresion exp
       (numero-lit (n) n) ;funciona
+      (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
+      (true-lit () #t)
+      (false-lit () #f)
       (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
@@ -292,7 +295,7 @@
       
       
                      
-      (else (eopl:error 'evaluar-definicion "expresión no soportada: ~s" exp))
+      (else (eopl:error 'evaluar-expresion "expresión no soportada: ~s" exp))
     )
   )
 )
@@ -576,10 +579,58 @@
   (lambda (sym los)
     (list-index (lambda (s) (eqv? s sym)) los)))
 
-; to-do: descripcion de la funcion
+; rib-find-position:
+; Proposito:
+; Sym x L -> N o #f : retorna la posición del símbolo dentro de la "costilla"
+; (rib) de un ambiente extendido, es decir, en su lista de símbolos. Esa
+; posición es la misma que ocupa su valor en el vector de valores, y por eso
+; aplicar-ambiente-referencia puede construir (a-ref posicion valores).
 (define rib-find-position
   (lambda (sym los)
     (list-find-position sym los)))
+
+; quitar-comillas:
+; Proposito:
+; S -> S : El scanner de SLLGEN guarda el lexema completo del token texto,
+; incluyendo las comillas ("hola" llega como "\"hola\"", de longitud 6). Esta
+; funcion retorna la cadena sin la primera ni la ultima comilla, para que
+; longitud y concat trabajen sobre el contenido real.
+(define quitar-comillas
+  (lambda (cadena)
+    (substring cadena 1 (- (string-length cadena) 1))))
+
+; valor-verdad?:
+; Proposito:
+; V -> B : Determina si un valor se interpreta como verdadero o falso en una
+; condicion (true-value?). Un bool se usa tal cual; un numero es falso si es 0 
+; y verdadero en otro caso (regla del enunciado). Cualquier otro valor 
+; lanza un error.
+(define valor-verdad?
+  (lambda (valor)
+    (cond
+      ((boolean? valor) valor)
+      ((number? valor) (not (zero? valor)))
+      (else (eopl:error 'valor-verdad?
+                        "Una condicion debe ser bool o numero, se recibio: ~s"
+                        valor)))))
+
+; evaluar-operandos:
+; Proposito:
+; L(expresion) x Amb -> L(V) : Evalua cada expresion de una lista en el mismo
+; ambiente y retorna la lista de valores.
+(define evaluar-operandos
+  (lambda (operandos amb)
+    (if (null? operandos)
+        '()
+        (cons (evaluar-operando (car operandos) amb)
+              (evaluar-operandos (cdr operandos) amb)))))
+
+; evaluar-operando:
+; Proposito:
+; expresion x Amb -> V : Evalua un solo operando (eval-rand).
+(define evaluar-operando
+  (lambda (operando amb)
+    (evaluar-expresion operando amb)))
 
 
 
