@@ -1,6 +1,8 @@
 #lang eopl
 (require racket/string)
 
+
+
 ;; ============================================================================
 ;; GRAMÁTICA BNF — LOGICFUSION
 ;; ============================================================================
@@ -201,6 +203,8 @@
   )
  )
 
+; GLOBALS{} PROGRAM{int x = True;}
+
 ;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
 ; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
 ;(se requiere crear la funcion de validar-tipos y hacer unas comparaciones)
@@ -208,29 +212,59 @@
   (lambda (def ambiente)
     (cases definicion def
       (variable-definicion (tipo identificador expresion)
-                            (ambiente-extendido
-                             (vector tipo)
-                             (list identificador)
-                             (vector (evaluar-expresion expresion ambiente))
-                             (vector #f)
-                             ambiente))
+                           (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
+                             ;si la validacion es correcta, extiende el ambiente
+                             (if (validar-tipo tipo valor-inicial)
+                                 (ambiente-extendido
+                                  (vector tipo)
+                                  (list identificador)
+                                  (vector valor-inicial)
+                                  (vector #f)
+                                  ambiente)
+
+                                (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
-                             (ambiente-extendido
-                              (vector tipo)
-                              (list identificador)
-                              (vector (evaluar-expresion expresion ambiente))
-                              (vector #t)
-                              ambiente))
-     )
+                            (let ((valor-constante (evaluar-expresion expresion ambiente)))
+                              (if (validar-tipo tipo valor-constante)
+                                  (ambiente-extendido
+                                   (vector tipo)
+                                   (list identificador)
+                                   (vector valor-constante)
+                                   (vector #t)
+                                   ambiente)
+
+                                  (eopl:error 'evaluar-definicion "La constante ~s es de tipo ~s y recibio ~s" identificador tipo valor-constante)))))
+                            )
+                          )
+
+;falta validar el caso 2, cuando se modifica en el ambiente (asignar, suponmgo que el set del profesor, nosotros usamos "->")
+; y probar esta primera implementacion
+(define validar-tipo
+  (lambda (tipo-dato valor)
+    (cases tipo tipo-dato
+      ;tipos primitivos
+      (entero-tipo () (entero? valor)) ;reutilizamos un predicado de nosotros
+      (decimal-tipo () (real? valor)) ;para flotantes
+      (cadena-tipo () (string? valor))
+      (booleano-tipo () (boolean? valor))
+      (void-tipo () #t)
+      ;abajo iran los tipos compuestos
+      (else (eopl:error 'validar-tipo "tipo ~s no soportdado aun" tipo-dato)
+      )
     )
   )
+)
+
+
 
 (define evaluar-expresion
   (lambda (exp amb)
     (cases expresion exp
       (numero-lit (n) n) ;funciona
       (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
+      (true-lit () #t)
+      (false-lit () #f)
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
       (primitiva-binaria-expresion (exp1 prim exp2)
