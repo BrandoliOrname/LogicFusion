@@ -95,19 +95,13 @@
     ; Tipos Compuestos
     (tipo-compuesto ("sat") sat-tipo)
     (tipo-compuesto ("proc") proc-tipo)
-    (tipo-compuesto ("list" "<" tipo ">") lista-tipo)
-    (tipo-compuesto ("vector" "<" tipo ">") vector-tipo)
-    (tipo-compuesto ("dict" "<" tipo "," tipo ">") diccionario-tipo)
+    (tipo-compuesto ("list" "<" tipo-primitivo ">") lista-tipo)
+    (tipo-compuesto ("vector" "<" tipo-primitivo ">") vector-tipo)
+    (tipo-compuesto ("dict" "<" tipo-primitivo "," tipo-primitivo ">") diccionario-tipo)
 
-    (expresion ("(" expresion resto-de-parentesis ")") expresion-con-parentesis)
-
-    (resto-de-parentesis (primitiva-binaria expresion) continuacion-binaria)
-    (resto-de-parentesis ("," (separated-list expresion ",")) continuacion-lista)
-    
-
+    (expresion ( "(" (separated-list dato-primitivo ",") ")") lista-dato-primitivo)
 
     ;; Expresiones base => Especificación Léxica
-    (expresion (dato-primitivo) dato-simple)
     (dato-primitivo (entero-negativo) numero-lit)
     (dato-primitivo (entero-positivo) numero-lit)
     (dato-primitivo (decimal-negativo) numero-lit)
@@ -115,8 +109,7 @@
     (dato-primitivo (texto) cadena-lit)
     (dato-primitivo ("True") true-lit)
     (dato-primitivo ("False") false-lit)
-
-    (expresion (identificador) variable-exp)
+    (dato-primitivo (identificador) variable-exp)
 
     ;; Expresiones de lista
     ; 1. empty
@@ -144,6 +137,11 @@
     ;; Nota: se eliminó (expresion ("(" expresion ")") parentesis-exp) porque
     ;; SLLGEN exige gramática LL(1) y esa producción empieza igual que la
     ;; binaria. La agrupación ya la da la propia forma "( e1 op e2 )".
+    (expresion (dato-primitivo (arbno continuacion-operacion))
+           expresion-operaciones)
+    
+    (continuacion-operacion (primitiva-binaria dato-primitivo)
+                        una-operacion)
     (expresion (primitiva-unaria "(" expresion ")") primitiva-unaria-expresion)
 
     ;; Primitivas binarias
@@ -275,6 +273,7 @@
       (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
       (true-lit () #t)
       (false-lit () #f)
+      (variable-exp (id) (aplicar-ambiente amb id))
     )))
 
 
@@ -282,22 +281,36 @@
 (define evaluar-expresion
   (lambda (exp amb)
     (cases expresion exp
-      (variable-exp (id) (aplicar-ambiente amb id))
-      ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
-      ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
-      (primitiva-unaria-expresion (prim operando)
-                                  (evaluar-primitiva-unaria prim
-                                                            (evaluar-expresion operando amb)))
-      (dato-simple (dato) (evaluar-dato-primitivo dato amb))
-      (expresion-con-parentesis (exp resto)
-         (cases resto-de-parentesis resto
-              (continuacion-binaria (op exp2)
-              (evaluar-primitiva-binaria op
-                         (evaluar-expresion exp amb)
-                          (evaluar-expresion exp2 amb)))
-               (continuacion-lista (mas-expresiones)
-                                    (cons (evaluar-expresion exp amb)
-                                    (map (lambda (e) (evaluar-expresion e amb)) mas-expresiones)))))
+      ; expresion-operaciones: D x L(CO) -> V : Procedimiento que recibe un dato
+      ; primitivo y una lista de continuaciones de operaciones. Primero evalúa
+      ; el dato inicial y los datos adicionales de cada operación. Después,
+      ; obtiene los operadores correspondientes y construye una lista de valores
+      ; que incluye el resultado inicial y los resultados adicionales.
+      ; Finalmente, utiliza evaluar-secuencia para resolver la expresión
+      ; respetando la precedencia de los operadores.
+      (expresion-operaciones (dato operaciones)
+          (let* ((valor-inicial
+              (evaluar-dato-primitivo dato amb))
+                 (valores-adicionales
+                   (map (lambda (operacion)
+                   (cases continuacion-operacion operacion
+                      (una-operacion (op dato)
+                         (evaluar-dato-primitivo dato amb))))
+                   operaciones))
+              (operadores
+                  (map (lambda (operacion)
+                    (cases continuacion-operacion operacion
+                      (una-operacion (op dato) op)))
+                   operaciones))
+              (valores
+               (cons valor-inicial valores-adicionales)))
+
+    (evaluar-secuencia valores operadores)))
+      (lista-dato-primitivo (datos)
+                            (map (lambda (dato) (evaluar-dato-primitivo dato amb)) datos))
+      (primitiva-unaria-expresion (primitiva expresion)
+                                  (let ((valor (evaluar-expresion expresion amb)))
+                                    (evaluar-primitiva-unaria primitiva valor)))
       ;; Expresiones de lista
       (lista-vacia () '())
       (vacio-predicado (lista)
@@ -537,6 +550,134 @@
       ((equal? '!= operador) (not (= n1 n2)))
       (else (eopl:error 'condicional? "Operador no soportado ~s" operador)))))
 
+; es-multiplicacion-division?:
+; Proposito:
+; PB -> B : Procedimiento que recibe una primitiva binaria y retorna #t si
+; corresponde a una multiplicacion (*) o division (/). En caso contrario,
+; retorna #f. Se utiliza para identificar las operaciones que tienen mayor
+; prioridad al evaluar una secuencia de operaciones.
+(define es-multiplicacion-division?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (multiplicacion () #t)
+      (division () #t)
+      (else #f))))
+
+; es-suma-resta?:
+; Proposito:
+; PB -> B : Procedimiento que recibe una primitiva binaria y retorna #t si
+; corresponde a una suma (+) o resta (~). En caso contrario, retorna #f.
+; Se utiliza para identificar las operaciones que se evalúan después de
+; las multiplicaciones y divisiones.
+(define es-suma-resta?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (suma () #t)
+      (resta () #t)
+      (else #f))))
+
+; es-concat?:
+; PB -> B : Procedimiento que recibe una primitiva binaria y retorna #t si
+; corresponde a una concatenación (concat). En caso contrario, retorna #f.
+; Se utiliza para identificar las operaciones de concatenación que deben
+; resolverse después de las operaciones aritméticas y antes de las
+; comparaciones, durante la evaluación de una secuencia de operaciones.
+(define es-concat?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (concat () #t)
+      (else #f))))
+
+; es-comparacion?:
+; PB -> B : Procedimiento que recibe una primitiva binaria y retorna #t si
+; corresponde a una operación de comparación (>, <, >=, <=, != o ==).
+; En caso contrario, retorna #f. Se utiliza para identificar las operaciones
+; relacionales que deben resolverse después de las operaciones aritméticas
+; y de concatenación, durante la evaluación de una secuencia de operaciones.
+(define es-comparacion?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (mayor () #t)
+      (menor () #t)
+      (mayor-igual () #t)
+      (menor-igual () #t)
+      (diferente () #t)
+      (igual () #t)
+      (else #f))))
+
+; reducir-nivel:
+; Proposito:
+; L(V) x L(PB) x Pred -> L(L(V)) : Procedimiento que recibe una lista de
+; valores, una lista de operadores y un predicado que determina cuáles
+; operaciones debe resolver. Recorre las operaciones de izquierda a derecha,
+; ejecuta las que cumplen el predicado y conserva las demás para evaluarlas
+; posteriormente. Retorna una lista con los nuevos valores y los operadores
+; pendientes.
+(define reducir-nivel
+  (lambda (valores operadores predicado)
+    (letrec
+        ((recorrer
+          (lambda (resto-valores resto-operadores acumulado
+                  nuevos-valores nuevos-operadores)
+
+            (if (null? resto-operadores)
+
+                (list (append nuevos-valores (list acumulado))
+                      nuevos-operadores)
+
+                (let ((op (car resto-operadores))
+                      (siguiente (car resto-valores)))
+
+                  (if (predicado op)
+
+                      (recorrer
+                       (cdr resto-valores)
+                       (cdr resto-operadores)
+                       (evaluar-primitiva-binaria
+                        op acumulado siguiente)
+                       nuevos-valores
+                       nuevos-operadores)
+
+                      (recorrer
+                       (cdr resto-valores)
+                       (cdr resto-operadores)
+                       siguiente
+                       (append nuevos-valores (list acumulado))
+                       (append nuevos-operadores (list op)))))))))
+
+      (recorrer (cdr valores)
+                operadores
+                (car valores)
+                '()
+                '()))))
+; evaluar-secuencia:
+; L(V) x L(PB) -> V : Procedimiento que recibe una lista de valores y una
+; lista de operadores. Primero utiliza reducir-nivel para resolver las
+; multiplicaciones y divisiones, después resuelve las sumas y restas.
+; Finalmente, retorna el resultado de la expresión evaluada.
+(define evaluar-secuencia
+  (lambda (valores operadores)
+
+    (let* ((nivel-1
+            (reducir-nivel valores operadores
+                           es-multiplicacion-division?))
+
+           (nivel-2
+            (reducir-nivel (car nivel-1) (cadr nivel-1)
+                           es-suma-resta?))
+
+           (nivel-3
+            (reducir-nivel (car nivel-2) (cadr nivel-2)
+                           es-concat?))
+
+           (nivel-4
+            (reducir-nivel (car nivel-3) (cadr nivel-3)
+                           es-comparacion?)))
+
+      (if (null? (cdr (car nivel-4)))
+          (car (car nivel-4))
+          (eopl:error 'evaluar-secuencia
+                      "Quedaron operadores sin evaluar")))))
 ;; ============================================================================
 
 ;; ============================================================================
@@ -658,27 +799,6 @@
       (else (eopl:error 'valor-verdad?
                         "Una condicion debe ser bool o numero, se recibio: ~s"
                         valor)))))
-
-; evaluar-operandos:
-; Proposito:
-; L(expresion) x Amb -> L(V) : Evalua cada expresion de una lista en el mismo
-; ambiente y retorna la lista de valores.
-(define evaluar-operandos
-  (lambda (operandos amb)
-    (if (null? operandos)
-        '()
-        (cons (evaluar-operando (car operandos) amb)
-              (evaluar-operandos (cdr operandos) amb)))))
-
-; evaluar-operando:
-; Proposito:
-; expresion x Amb -> V : Evalua un solo operando (eval-rand).
-(define evaluar-operando
-  (lambda (operando amb)
-    (evaluar-expresion operando amb)))
-
-
-
 
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
