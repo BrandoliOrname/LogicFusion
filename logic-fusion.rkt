@@ -1,6 +1,8 @@
 #lang eopl
 (require racket/string)
 
+
+
 ;; ============================================================================
 ;; GRAMÁTICA BNF — LOGICFUSION
 ;; ============================================================================
@@ -87,9 +89,7 @@
     (tipo ("bool") booleano-tipo)
     (tipo ("void") void-tipo)
     (tipo ("sat") sat-tipo)
-    (tipo ("proc" identificador "=" "lambda" "(" tipo identificador ")"
-                  "{" "return" expresion "}")
-          proc-tipo)
+    (tipo ("proc") proc-tipo)
     (tipo ("list" "<" tipo ">") lista-tipo)
 
     (expresion ("(" expresion resto-de-parentesis ")") expresion-con-parentesis)
@@ -187,7 +187,7 @@
 ;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
 ;es por ello que usamos ambos en cases
 ;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
-(define evaluar-programa ;creo que ya esta
+(define evaluar-programa 
   (lambda(pgm)
     (cases programa pgm
       (un-programa (global-defs program-defs)
@@ -203,49 +203,71 @@
       (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
                           (deref (a-ref 0 valores))))))
         
-;esta solo recorre la lista de las defs pero invoca a la fn importante evaluar-definicion
 (define recorrer-lista-definicion
   (lambda (defs amb)
     (if (null? defs) amb
-        ;sino, llamado recursivo a la fn, con el cuerpo de la lista de defs, y el ambiente nuevo generado en evaluar-definicion
         (recorrer-lista-definicion (cdr defs) (evaluar-definicion (car defs) amb))
     )
   )
  )
 
-;evaluar-definicion devuelve solamente un ambiente extendido, pero con el valor de la expresion guardado dentro
-; proximamente hay que validar los tipos (chequeo de tipos), pero solo es insertar un paso a lo que ya existe aqui.
-;(se requiere crear la funcion de validar-tipos y hacer unas comparaciones)
+
 (define evaluar-definicion
   (lambda (def ambiente)
     (cases definicion def
       (variable-definicion (tipo identificador expresion)
-                            (ambiente-extendido
-                             (vector tipo)
-                             (list identificador)
-                             (vector (evaluar-expresion expresion ambiente))
-                             (vector #f)
-                             ambiente))
+                           (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
+                             ;si la validacion es correcta, extiende el ambiente
+                             (if (validar-tipo tipo valor-inicial)
+                                 (ambiente-extendido
+                                  (vector tipo)
+                                  (list identificador)
+                                  (vector valor-inicial)
+                                  (vector #f)
+                                  ambiente)
+
+                                (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
-                             (ambiente-extendido
-                              (vector tipo)
-                              (list identificador)
-                              (vector (evaluar-expresion expresion ambiente))
-                              (vector #t)
-                              ambiente))
-     )
+                            (let ((valor-constante (evaluar-expresion expresion ambiente)))
+                              (if (validar-tipo tipo valor-constante)
+                                  (ambiente-extendido
+                                   (vector tipo)
+                                   (list identificador)
+                                   (vector valor-constante)
+                                   (vector #t)
+                                   ambiente)
+
+                                  (eopl:error 'evaluar-definicion "La constante ~s es de tipo ~s y recibio ~s" identificador tipo valor-constante)))))
+                            )
+                          )
+
+;falta completar con los tipos compuestos y  el caso 2, cuando se modifica en el ambiente (asignar, suponmgo que el set del profesor, nosotros usamos "->")
+(define validar-tipo
+  (lambda (tipo-dato valor)
+    (cases tipo tipo-dato
+      (entero-tipo () (entero? valor)) ;reutilizamos un predicado de nosotros
+      (decimal-tipo () (real? valor)) ;para flotantes
+      (cadena-tipo () (string? valor))
+      (booleano-tipo () (boolean? valor))
+      (void-tipo () #t)
+      ;abajo iran los tipos compuestos
+      (else (eopl:error 'validar-tipo "tipo ~s no soportdado aun" tipo-dato)
+      )
     )
   )
+)
+
+
 
 (define evaluar-expresion
   (lambda (exp amb)
     (cases expresion exp
-      (numero-lit (n) n) ;funciona
+      (numero-lit (n) n)
       (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
       (true-lit () #t)
       (false-lit () #f)
-      (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
+      (variable-exp (id) (aplicar-ambiente amb id))
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
       (primitiva-unaria-expresion (prim operando)
