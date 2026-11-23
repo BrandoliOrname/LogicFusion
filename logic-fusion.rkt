@@ -251,8 +251,6 @@
       (primitiva-unaria-expresion (prim operando)
                                   (evaluar-primitiva-unaria prim
                                                             (evaluar-expresion operando amb)))
-      (true-lit () #t)
-      (false-lit () #f)
 
       (expresion-con-parentesis (exp resto)
          (cases resto-de-parentesis resto
