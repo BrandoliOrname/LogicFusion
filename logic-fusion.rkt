@@ -91,7 +91,11 @@
                   "{" "return" expresion "}")
           proc-tipo)
     (tipo ("list" "<" tipo ">") lista-tipo)
-    (expresion ("(" (separated-list expresion ",") ")") lista-de-valores)
+
+    (expresion ("(" expresion resto-de-parentesis ")") expresion-con-parentesis)
+
+    (resto-de-parentesis (primitiva-binaria expresion) continuacion-binaria)
+    (resto-de-parentesis ("," (separated-list expresion ",")) continuacion-lista)
     
     (tipo ("vector" "<" tipo ">") vector-tipo)
     (tipo ("dict" "<" tipo "," tipo ">") diccionario-tipo)
@@ -132,7 +136,6 @@
     ;; Nota: se eliminó (expresion ("(" expresion ")") parentesis-exp) porque
     ;; SLLGEN exige gramática LL(1) y esa producción empieza igual que la
     ;; binaria. La agrupación ya la da la propia forma "( e1 op e2 )".
-    ;(expresion ("(" expresion primitiva-binaria expresion ")") primitiva-binaria-expresion)
     (expresion (primitiva-unaria "(" expresion ")") primitiva-unaria-expresion)
 
     ;; Primitivas binarias
@@ -242,17 +245,21 @@
       (variable-exp (id) (aplicar-ambiente amb id)) ;funciona
       ;; Primitivas (Parte 1 - Brandon): se evalúan los operandos (de izquierda
       ;; a derecha) y luego se aplica la primitiva sobre los valores resultantes.
-      ;(primitiva-binaria-expresion (exp1 prim exp2)
-      ;                             (evaluar-primitiva-binaria prim
-      ;                                                        (evaluar-expresion exp1 amb)
-      ;                                                        (evaluar-expresion exp2 amb)))
       (primitiva-unaria-expresion (prim operando)
                                   (evaluar-primitiva-unaria prim
                                                             (evaluar-expresion operando amb)))
       (true-lit () #t)
       (false-lit () #f)
-      (lista-de-valores (expresiones)
-                        (map (lambda (e) (evaluar-expresion e amb)) expresiones))
+
+      (expresion-con-parentesis (exp resto)
+         (cases resto-de-parentesis resto
+              (continuacion-binaria (op exp2)
+              (evaluar-primitiva-binaria op
+                         (evaluar-expresion exp amb)
+                          (evaluar-expresion exp2 amb)))
+               (continuacion-lista (mas-expresiones)
+                                    (cons (evaluar-expresion exp amb)
+                                    (map (lambda (e) (evaluar-expresion e amb)) mas-expresiones)))))
       ;; Expresiones de lista
       (lista-vacia () '())
       (vacio-predicado (lista)
