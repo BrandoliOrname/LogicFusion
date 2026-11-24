@@ -130,6 +130,9 @@
     (expresion ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
     ; 9. length(lst)
     (expresion ("length" "(" expresion ")" ) longitud-lista)
+
+    ;; Expresion de asignacion (modificar/actualizar variables)
+    (expresion ("set" identificador "->" expresion) asignar-expresion)
     
     
     ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
@@ -308,6 +311,9 @@
     (evaluar-secuencia valores operadores)))
       (lista-dato-primitivo (datos)
                             (map (lambda (dato) (evaluar-dato-primitivo dato amb)) datos))
+
+      (asignar-expresion (id expresion) (aplicar-asignacion id amb (evaluar-expresion expresion amb))) ;el tercer parametro es el valor para cambiar
+
       (primitiva-unaria-expresion (primitiva expresion)
                                   (let ((valor (evaluar-expresion expresion amb)))
                                     (evaluar-primitiva-unaria primitiva valor)))
@@ -740,6 +746,37 @@
     )
   )
 
+;funcion auxiliar para armar la lista que nos ayuda a setear/asignar "->". Es "hermana" de aplicar-ambiente-referencia, solo cambia lo que retorna
+(define buscar-ligadura-para-modificar
+  (lambda (amb simbolo)
+    (cases ambiente amb
+      (ambiente-vacio ()
+          (eopl:error 'buscar-ligadura-para-modificar "No esta ligada para ~s" simbolo))
+      (ambiente-extendido (tipos simbolos valores es-const amb)
+          (let ((posicion (rib-find-position simbolo simbolos)))
+            (if (number? posicion)
+                (list (a-ref posicion valores) (vector-ref tipos posicion) (vector-ref es-const posicion))
+                (buscar-ligadura-para-modificar amb simbolo)))))))
+
+(define aplicar-asignacion
+  (lambda (id amb valor-para-cambiar)
+    (let* ((lista-ref-tipo-const (buscar-ligadura-para-modificar amb id)) ;sacamos cada elemento de la lista
+           (referencia (car lista-ref-tipo-const))
+           (tipo-variable (cadr lista-ref-tipo-const))
+           (es-constante (caddr lista-ref-tipo-const))
+           )
+             (if es-constante ;cuerpo del let*
+               (eopl:error 'aplicar-asignacion "No se puede cambiar la constante ~s" id)
+               (if (validar-tipo tipo-variable valor-para-cambiar)
+                   (begin
+                     (setref! referencia valor-para-cambiar)
+                     (deref referencia)) ;devuelve el nuevo valor que guardamos en la referencia :)
+                   (eopl:error 'aplicar-asignacion "La variable ~s es de tipo ~s y no se puede cambiar a ~s" id tipo-variable valor-para-cambiar )      
+              )
+          )
+      )
+    )
+  )
 
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
