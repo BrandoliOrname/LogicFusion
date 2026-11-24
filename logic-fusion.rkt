@@ -133,6 +133,10 @@
 
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
+
+    ;; Condicional if/else (cada rama es una expresion)
+    (expresion ("if" "(" expresion ")" "{" expresion "}"
+                "else" "{" expresion "}") if-exp)
     
     
     ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
@@ -354,6 +358,11 @@
                         (if (list? l)
                             (length l)
                             (eopl:error 'longitud-lista "No es una lista ~s" l))))
+      
+      (if-exp (condicion rama-verdadera rama-falsa)
+              (if (valor-verdad? (evaluar-expresion condicion amb))
+                  (evaluar-expresion rama-verdadera amb)
+                  (evaluar-expresion rama-falsa amb)))    
       
       
                      
@@ -892,6 +901,13 @@
 ;; Anidadas
 ;; (scan&parse "GLOBALS { } PROGRAM { int x = head(tail(make-list(10, make-list(20, make-list(30, empty))))); }")          ; 20
 ;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(tail(make-list(1, empty))); }")                                      ; True - tail de lista de un elemento es empty
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA if/else
+;; ============================================================================
+;; (scan&parse "GLOBALS { int edad = 20; } PROGRAM { string r = if (edad >= 18) { \"Mayor de edad\" } else { \"Menor de edad\" }; }") ; "Mayor de edad"
+;; (scan&parse "GLOBALS { int edad = 15; } PROGRAM { string r = if (edad < 13) { \"Nino\" } else { if (edad < 18) { \"Adolescente\" } else { \"Adulto\" } }; }") ; "Adolescente" (anidado)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = if (0) { 1 } else { 2 }; }") ; 2 (0 es falso)
 ;; ============================================================================
 ;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
 (define logicfusion-interpretador
