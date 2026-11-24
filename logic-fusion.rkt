@@ -19,10 +19,15 @@
 ;;                | "vector" "<" tipo ">"
 ;;                | "dict" "<" tipo "," tipo ">"
 ;;
-;; expresion    ::= number | float-lit | string-lit | identifier
-;;                | "True" | "False"
-;;                | "(" expresion primitiva-binaria expresion ")"
-;;                | primitiva-unaria "(" expresion ")"
+;; expresion    ::= operando { primitiva-binaria operando }
+;;                | "set" identificador "->" expresion
+;; operando        ::= dato-primitivo | primitiva-unaria "(" expresion ")"
+;;                | "(" contenido-parentesis ")" | operaciones de listas
+;;                | "BLOCK" "{" expresion ";" { expresion ";" } "}"
+;;                | "LOCALS" "{" definicion { definicion } "}"
+;;                  "{" expresion ";" { expresion ";" } "}"
+;; () es lista vacía, (e) agrupa, (e,) es lista de un elemento y
+;; (e1, e2, ...) es lista de varios elementos.
 ;;
 ;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
 ;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
@@ -53,7 +58,7 @@
     (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (entero-positivo (digit (arbno digit)) number)
     (entero-negativo ("-" digit (arbno digit)) number)
-    (identificador (letter (arbno (or letter digit "?" "-"))) symbol)
+    (identificador (letter (arbno (or letter digit "?" (concat "-" (or letter digit))))) symbol)
     (texto ("\"" (arbno (not #\")) "\"") string)
     ))
 ;; ============================================================================
@@ -99,7 +104,12 @@
     (tipo-compuesto ("vector" "<" tipo-primitivo ">") vector-tipo)
     (tipo-compuesto ("dict" "<" tipo-primitivo "," tipo-primitivo ">") diccionario-tipo)
 
-    (expresion ( "(" (separated-list dato-primitivo ",") ")") lista-dato-primitivo)
+    ;; Factorizar el paréntesis evita dos producciones con el mismo comienzo.
+    (operando ("(" contenido-parentesis ")") operando-parentesis)
+    (contenido-parentesis () contenido-vacio)
+    (contenido-parentesis (expresion resto-parentesis) contenido-no-vacio)
+    (resto-parentesis () agrupacion)
+    (resto-parentesis ("," (separated-list expresion ",")) elementos-lista)
 
     ;; Expresiones base => Especificación Léxica
     (dato-primitivo (entero-negativo) numero-lit)
@@ -113,43 +123,44 @@
 
     ;; Expresiones de lista
     ; 1. empty
-    (expresion ("empty") lista-vacia)
+    (operando ("empty") lista-vacia)
     ; 2. empty?(lst)
-    (expresion ("empty?" "(" expresion ")") vacio-predicado)
+    (operando ("empty?" "(" expresion ")") vacio-predicado)
     ; 3. make-list(elem, lst)
-    (expresion ("make-list" "(" expresion "," expresion ")" ) crear-lista)
+    (operando ("make-list" "(" expresion "," expresion ")" ) crear-lista)
     ; 4. list?(lst)
-    (expresion ("list?" "(" expresion ")" ) lista-predicado)
+    (operando ("list?" "(" expresion ")" ) lista-predicado)
     ; 5. head(lst) 
-    (expresion ("head" "(" expresion ")" ) cabeza-lista)
+    (operando ("head" "(" expresion ")" ) cabeza-lista)
     ; 6. tail(lst)
-    (expresion ("tail" "(" expresion ")" ) cola-lista)
+    (operando ("tail" "(" expresion ")" ) cola-lista)
     ; 7. append(lst1, lst2)
-    (expresion ("append" "(" expresion "," expresion ")" ) concatenar-listas)
+    (operando ("append" "(" expresion "," expresion ")" ) concatenar-listas)
     ; 8. ref-list(lst, pos)
-    (expresion ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
+    (operando ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
     ; 9. length(lst)
-    (expresion ("length" "(" expresion ")" ) longitud-lista)
+    (operando ("length" "(" expresion ")" ) longitud-lista)
 
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
-
+    
     ;; Condicional if/else (cada rama es una expresion)
     (expresion ("if" "(" expresion ")" "{" expresion "}"
                 "else" "{" expresion "}") if-exp)
+    
+    ;; BLOCK y LOCALS requieren un cuerpo con al menos una expresión.
+    ;; LOCALS requiere al menos una definición.
+    (operando ("BLOCK" "{" expresion ";" (arbno expresion ";") "}")
+           bloque-expresion)
+    (operando ("LOCALS" "{" definicion (arbno definicion) "}"
+            "{" expresion ";" (arbno expresion ";") "}")
+           locales-expresion)
 
-    
-    ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
-    ;; la unaria va prefija con su operando entre paréntesis.
-    ;; Nota: se eliminó (expresion ("(" expresion ")") parentesis-exp) porque
-    ;; SLLGEN exige gramática LL(1) y esa producción empieza igual que la
-    ;; binaria. La agrupación ya la da la propia forma "( e1 op e2 )".
-    (expresion (dato-primitivo (arbno continuacion-operacion))
-           expresion-operaciones)
-    
-    (continuacion-operacion (primitiva-binaria dato-primitivo)
-                        una-operacion)
-    (expresion (primitiva-unaria "(" expresion ")") primitiva-unaria-expresion)
+    ;; Los operandos pueden ser datos, unarias, agrupaciones, listas o bloques.
+    (expresion (operando (arbno continuacion-operacion)) expresion-operaciones)
+    (continuacion-operacion (primitiva-binaria operando) una-operacion)
+    (operando (dato-primitivo) operando-primitivo)
+    (operando (primitiva-unaria "(" expresion ")") primitiva-unaria-expresion)
 
     ;; Primitivas binarias
     (primitiva-binaria ("+") suma)
@@ -288,39 +299,48 @@
 (define evaluar-expresion
   (lambda (exp amb)
     (cases expresion exp
-      ; expresion-operaciones: D x L(CO) -> V : Procedimiento que recibe un dato
-      ; primitivo y una lista de continuaciones de operaciones. Primero evalúa
-      ; el dato inicial y los datos adicionales de cada operación. Después,
-      ; obtiene los operadores correspondientes y construye una lista de valores
-      ; que incluye el resultado inicial y los resultados adicionales.
-      ; Finalmente, utiliza evaluar-secuencia para resolver la expresión
-      ; respetando la precedencia de los operadores.
-      (expresion-operaciones (dato operaciones)
-          (let* ((valor-inicial
-              (evaluar-dato-primitivo dato amb))
-                 (valores-adicionales
-                   (map (lambda (operacion)
-                   (cases continuacion-operacion operacion
-                      (una-operacion (op dato)
-                         (evaluar-dato-primitivo dato amb))))
-                   operaciones))
-              (operadores
-                  (map (lambda (operacion)
-                    (cases continuacion-operacion operacion
-                      (una-operacion (op dato) op)))
-                   operaciones))
-              (valores
-               (cons valor-inicial valores-adicionales)))
+      (asignar-expresion (id expresion)
+        (aplicar-asignacion id amb (evaluar-expresion expresion amb)))
+      (if-exp (condicion rama-verdadera rama-falsa)
+              (if (valor-verdad? (evaluar-expresion condicion amb))
+                  (evaluar-expresion rama-verdadera amb)
+                  (evaluar-expresion rama-falsa amb)))
+      (expresion-operaciones (primero operaciones)
+        (let* ((valor-inicial (evaluar-operando primero amb))
+               (valores-adicionales
+                (map (lambda (operacion)
+                       (cases continuacion-operacion operacion
+                         (una-operacion (op operando)
+                           (evaluar-operando operando amb))))
+                     operaciones))
+               (operadores
+                (map (lambda (operacion)
+                       (cases continuacion-operacion operacion
+                         (una-operacion (op operando) op)))
+                     operaciones)))
+          (evaluar-secuencia (cons valor-inicial valores-adicionales) operadores))))))
 
-    (evaluar-secuencia valores operadores)))
-      (lista-dato-primitivo (datos)
-                            (map (lambda (dato) (evaluar-dato-primitivo dato amb)) datos))
-
-      (asignar-expresion (id expresion) (aplicar-asignacion id amb (evaluar-expresion expresion amb))) ;el tercer parametro es el valor para cambiar
-
+(define evaluar-operando
+  (lambda (dato-operando amb)
+    (cases operando dato-operando
+      (operando-primitivo (dato) (evaluar-dato-primitivo dato amb))
+      (operando-parentesis (contenido)
+        (cases contenido-parentesis contenido
+          (contenido-vacio () '())
+          (contenido-no-vacio (primera resto)
+            (cases resto-parentesis resto
+              (agrupacion () (evaluar-expresion primera amb))
+              (elementos-lista (otras)
+                (cons (evaluar-expresion primera amb)
+                      (map (lambda (e) (evaluar-expresion e amb)) otras)))))))
+      (bloque-expresion (primera restantes)
+        (evaluar-cuerpo-secuencia primera restantes amb))
+      (locales-expresion (primera-def otras-defs primera-exp otras-exps)
+        (let ((ambiente-local
+               (recorrer-lista-definicion (cons primera-def otras-defs) amb)))
+          (evaluar-cuerpo-secuencia primera-exp otras-exps ambiente-local)))
       (primitiva-unaria-expresion (primitiva expresion)
-                                  (let ((valor (evaluar-expresion expresion amb)))
-                                    (evaluar-primitiva-unaria primitiva valor)))
+        (evaluar-primitiva-unaria primitiva (evaluar-expresion expresion amb)))
       ;; Expresiones de lista
       (lista-vacia () '())
       (vacio-predicado (lista)
@@ -359,16 +379,21 @@
                             (length l)
                             (eopl:error 'longitud-lista "No es una lista ~s" l))))
       
-      (if-exp (condicion rama-verdadera rama-falsa)
-              (if (valor-verdad? (evaluar-expresion condicion amb))
-                  (evaluar-expresion rama-verdadera amb)
-                  (evaluar-expresion rama-falsa amb))) 
-      
+
+      (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
                      
-      (else (eopl:error 'evaluar-expresion "expresión no soportada: ~s" exp))
-    )
-  )
-)
+      )))
+
+;; Evalúa en orden y conserva el valor de la última expresión del cuerpo.
+;; evaluar-secuencia, más abajo, se ocupa de la precedencia de operadores.
+(define evaluar-cuerpo-secuencia
+  (lambda (primera restantes amb)
+    (let loop ((valor (evaluar-expresion primera amb))
+               (pendientes restantes))
+      (if (null? pendientes)
+          valor
+          (loop (evaluar-expresion (car pendientes) amb)
+                (cdr pendientes))))))
 
     
 ;; ============================================================================
@@ -896,6 +921,12 @@
 ;; (scan&parse "GLOBALS { bool b = neg(True); } PROGRAM { }")          ; negacion-booleana
 ;; (scan&parse "GLOBALS { int a = add1(sub1((1 + 2))); } PROGRAM { }") ; anidadas
 
+;; Secuencias y asignación (ejemplos de cada nueva producción):
+;; (scan&parse "GLOBALS { int x = 1; } PROGRAM { int r = BLOCK { set x -> 4; x; }; }")
+;; (scan&parse "GLOBALS { int x = 1; } PROGRAM { int r = LOCALS { int x = 2; } { set x -> 3; x; }; }")
+;; (scan&parse "GLOBALS {} PROGRAM { list<int> x = (1,); }")
+;; (scan&parse "GLOBALS {} PROGRAM { int x = (1 + 2) * 3; }")
+
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE LISTAS
 ;; (se dejan comentados para que no se ejecuten al cargar el archivo)
@@ -926,7 +957,6 @@
 ;; Anidadas
 ;; (scan&parse "GLOBALS { } PROGRAM { int x = head(tail(make-list(10, make-list(20, make-list(30, empty))))); }")          ; 20
 ;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(tail(make-list(1, empty))); }")                                      ; True - tail de lista de un elemento es empty
-
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA if/else
 ;; ============================================================================
