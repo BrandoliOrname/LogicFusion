@@ -133,7 +133,11 @@
 
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
-    
+
+    ;; Condicional if/else (cada rama es una expresion)
+    (expresion ("if" "(" expresion ")" "{" expresion "}"
+                "else" "{" expresion "}") if-exp)
+
     
     ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
     ;; la unaria va prefija con su operando entre paréntesis.
@@ -355,6 +359,10 @@
                             (length l)
                             (eopl:error 'longitud-lista "No es una lista ~s" l))))
       
+      (if-exp (condicion rama-verdadera rama-falsa)
+              (if (valor-verdad? (evaluar-expresion condicion amb))
+                  (evaluar-expresion rama-verdadera amb)
+                  (evaluar-expresion rama-falsa amb))) 
       
                      
       (else (eopl:error 'evaluar-expresion "expresión no soportada: ~s" exp))
@@ -837,6 +845,32 @@
                         "Una condicion debe ser bool o numero, se recibio: ~s"
                         valor)))))
 
+;; valores-iguales?:
+; Proposito:
+; V x V -> B : Retorna #t si los dos valores son iguales. Compara numeros por
+; valor, cadenas con string=? y bool con eq? (eqv?). Valores de categorias distintas
+; (por ejemplo un int y una cadena) no son iguales entonces retorna #f.
+(define valores-iguales?
+  (lambda (valor1 valor2)
+    (cond
+      ((and (number? valor1) (number? valor2)) (= valor1 valor2))
+      ((and (string? valor1) (string? valor2)) (string=? valor1 valor2))
+      ((and (boolean? valor1) (boolean? valor2)) (eq? valor1 valor2))
+      (else #f))))
+
+; evaluar-switch:
+; Proposito:
+; V x L(E) x L(E) x E x Amb -> V : Recorre los case en orden. Evalua el valor
+; de cada case y en el primero que sea igual al valor dado, evalua y retorna
+; su cuerpo. Si la lista de case se acaba, evalua y retorna el cuerpo de default.
+(define evaluar-switch
+  (lambda (valor casos cuerpos cuerpo-default amb)
+    (cond
+      ((null? casos) (evaluar-expresion cuerpo-default amb))
+      ((valores-iguales? valor (evaluar-expresion (car casos) amb))
+       (evaluar-expresion (car cuerpos) amb))
+      (else (evaluar-switch valor (cdr casos) (cdr cuerpos) cuerpo-default amb)))))
+
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
 ;; (se dejan comentados para que no se ejecuten al cargar el archivo)
@@ -892,6 +926,13 @@
 ;; Anidadas
 ;; (scan&parse "GLOBALS { } PROGRAM { int x = head(tail(make-list(10, make-list(20, make-list(30, empty))))); }")          ; 20
 ;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(tail(make-list(1, empty))); }")                                      ; True - tail de lista de un elemento es empty
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA if/else
+;; ============================================================================
+;; (scan&parse "GLOBALS { int edad = 20; } PROGRAM { string r = if (edad >= 18) { \"Mayor de edad\" } else { \"Menor de edad\" }; }") ; "Mayor de edad"
+;; (scan&parse "GLOBALS { int edad = 15; } PROGRAM { string r = if (edad < 13) { \"Nino\" } else { if (edad < 18) { \"Adolescente\" } else { \"Adulto\" } }; }") ; "Adolescente" (anidado)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = if (0) { 1 } else { 2 }; }") ; 2 (0 es falso)
 ;; ============================================================================
 ;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
 (define logicfusion-interpretador
