@@ -137,7 +137,7 @@
     ;; Condicional if/else (cada rama es una expresion)
     (expresion ("if" "(" expresion ")" "{" expresion "}"
                 "else" "{" expresion "}") if-exp)
-    
+
     
     ;; Aplicación de primitivas: la binaria va infija y entre paréntesis,
     ;; la unaria va prefija con su operando entre paréntesis.
@@ -362,8 +362,7 @@
       (if-exp (condicion rama-verdadera rama-falsa)
               (if (valor-verdad? (evaluar-expresion condicion amb))
                   (evaluar-expresion rama-verdadera amb)
-                  (evaluar-expresion rama-falsa amb)))    
-      
+                  (evaluar-expresion rama-falsa amb))) 
       
                      
       (else (eopl:error 'evaluar-expresion "expresión no soportada: ~s" exp))
@@ -858,6 +857,19 @@
       ((and (string? valor1) (string? valor2)) (string=? valor1 valor2))
       ((and (boolean? valor1) (boolean? valor2)) (eq? valor1 valor2))
       (else #f))))
+
+; evaluar-switch:
+; Proposito:
+; V x L(E) x L(E) x E x Amb -> V : Recorre los case en orden. Evalua el valor
+; de cada case y en el primero que sea igual al valor dado, evalua y retorna
+; su cuerpo. Si la lista de case se acaba, evalua y retorna el cuerpo de default.
+(define evaluar-switch
+  (lambda (valor casos cuerpos cuerpo-default amb)
+    (cond
+      ((null? casos) (evaluar-expresion cuerpo-default amb))
+      ((valores-iguales? valor (evaluar-expresion (car casos) amb))
+       (evaluar-expresion (car cuerpos) amb))
+      (else (evaluar-switch valor (cdr casos) (cdr cuerpos) cuerpo-default amb)))))
 
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
