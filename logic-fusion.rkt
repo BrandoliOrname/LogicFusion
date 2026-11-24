@@ -846,6 +846,19 @@
                         "Una condicion debe ser bool o numero, se recibio: ~s"
                         valor)))))
 
+;; valores-iguales?:
+; Proposito:
+; V x V -> B : Retorna #t si los dos valores son iguales. Compara numeros por
+; valor, cadenas con string=? y bool con eq? (eqv?). Valores de categorias distintas
+; (por ejemplo un int y una cadena) no son iguales entonces retorna #f.
+(define valores-iguales?
+  (lambda (valor1 valor2)
+    (cond
+      ((and (number? valor1) (number? valor2)) (= valor1 valor2))
+      ((and (string? valor1) (string? valor2)) (string=? valor1 valor2))
+      ((and (boolean? valor1) (boolean? valor2)) (eq? valor1 valor2))
+      (else #f))))
+
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
 ;; (se dejan comentados para que no se ejecuten al cargar el archivo)
