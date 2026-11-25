@@ -280,28 +280,47 @@
                            (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
                              ;si la validacion es correcta, extiende el ambiente
                              (if (validar-tipo tipo valor-inicial)
-                                 (ambiente-extendido
-                                  (vector tipo)
-                                  (list identificador)
-                                  (vector valor-inicial)
-                                  (vector #f)
-                                  ambiente)
+                                 (extender-ambiente-definicion tipo identificador valor-inicial #f ambiente)
 
                                 (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
                             (let ((valor-constante (evaluar-expresion expresion ambiente)))
                               (if (validar-tipo tipo valor-constante)
-                                  (ambiente-extendido
-                                   (vector tipo)
-                                   (list identificador)
-                                   (vector valor-constante)
-                                   (vector #t)
-                                   ambiente)
+                                  (extender-ambiente-definicion tipo identificador valor-constante #t ambiente)
 
                                   (eopl:error 'evaluar-definicion "La constante ~s es de tipo ~s y recibio ~s" identificador tipo valor-constante)))))
                             )
                           )
+
+; extender-ambiente-definicion:
+; Proposito:
+; T x Sym x V x B x Amb -> Amb : Crea el eslabon de una definicion (una sola
+; ligadura) sobre el ambiente recibido. Si el valor es un procedimiento, lo
+; reemplaza por una clausura igual cuyo ambiente es el eslabon nuevo, para que
+; el procedimiento se vea a si mismo y pueda ser recursivo. Es la misma idea de
+; extend-env-recursively: primero se crea el eslabon con su vector y despues se
+; guarda en ese vector la clausura que apunta al eslabon (vector-set!).
+(define extender-ambiente-definicion
+  (lambda (tipo id valor es-constante amb)
+    (let* ((valores (vector valor))
+           (nuevo (ambiente-extendido (vector tipo) (list id) valores
+                                      (vector es-constante) amb)))
+      (if (procedimiento? valor)
+          (begin
+            (vector-set! valores 0 (cambiar-ambiente-clausura valor nuevo))
+            nuevo)
+          nuevo))))
+
+; cambiar-ambiente-clausura:
+; Proposito:
+; Proc x Amb -> Proc : Retorna una clausura con los mismos tipos, parametros y
+; cuerpo, pero con el ambiente recibido.
+(define cambiar-ambiente-clausura
+  (lambda (proc nuevo-amb)
+    (cases procedimiento proc
+      (clausura (tipos parametros cuerpo amb)
+        (clausura tipos parametros cuerpo nuevo-amb)))))
 
 ;falta completar con los tipos compuestos y  el caso 2, cuando se modifica en el ambiente (asignar, suponmgo que el set del profesor, nosotros usamos "->")
 (define validar-tipo
