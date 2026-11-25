@@ -171,7 +171,14 @@
     ;; BLOCK y LOCALS, para poder usarlo dentro de operaciones: 1 + if (...) {...} else {...}
     (operando ("if" "(" expresion ")" "{" expresion "}"
                "else" "{" expresion "}") operando-condicional)
-    
+
+    ;; Switch: compara el valor de la expresion con cada case en orden y evalua
+    ;; el cuerpo del primero que coincida; si ninguno coincide evalua default.
+    (operando ("switch" "(" expresion ")" "{"
+               (arbno "case" expresion ":" "{" expresion "}")
+               "default" ":" "{" expresion "}" "}")
+              operando-switch)
+
     ;; BLOCK y LOCALS requieren un cuerpo con al menos una expresión.
     ;; LOCALS requiere al menos una definición.
     (operando ("BLOCK" "{" expresion ";" (arbno expresion ";") "}")
@@ -357,6 +364,9 @@
         (if (valor-verdad? (evaluar-expresion condicion amb))
             (evaluar-expresion rama-verdadera amb)
             (evaluar-expresion rama-falsa amb)))
+      (operando-switch (exp-evaluada casos cuerpos cuerpo-default)
+        (evaluar-switch (evaluar-expresion exp-evaluada amb)
+                        casos cuerpos cuerpo-default amb))
       (bloque-expresion (primera restantes)
         (evaluar-cuerpo-secuencia primera restantes amb))
       (locales-expresion (primera-def otras-defs primera-exp otras-exps)
@@ -1021,6 +1031,24 @@
 ;; Anidadas
 ;; (scan&parse "GLOBALS { } PROGRAM { int x = head(tail(make-list(10, make-list(20, make-list(30, empty))))); }")          ; 20
 ;; (scan&parse "GLOBALS { } PROGRAM { bool b = empty?(tail(make-list(1, empty))); }")                                      ; True - tail de lista de un elemento es empty
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA if/else
+;; ============================================================================
+
+;; (scan&parse "GLOBALS { int edad = 20; } PROGRAM { string r = if (edad >= 18) { \"Mayor de edad\" } else { \"Menor de edad\" }; }") ; "Mayor de edad"
+;; (scan&parse "GLOBALS { int edad = 15; } PROGRAM { string r = if (edad < 13) { \"Nino\" } else { if (edad < 18) { \"Adolescente\" } else { \"Adulto\" } }; }") ; "Adolescente" (anidado)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = if (0) { 1 } else { 2 }; }") ; 2 (0 es falso)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = 10 + if (True) { 1 } else { 2 } * 3; }") ; 13 (if como operando)
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA switch
+;; ============================================================================
+
+;; (scan&parse "GLOBALS { string color = \"rojo\"; } PROGRAM { string r = switch (color) { case \"rojo\": { \"Para\" } case \"verde\": { \"Sigue\" } default: { \"Color invalido\" } }; }") ; "Para"
+;; (scan&parse "GLOBALS { string color = \"azul\"; } PROGRAM { string r = switch (color) { case \"rojo\": { \"Para\" } default: { \"Color invalido\" } }; }") ; "Color invalido" (default)
+;; (scan&parse "GLOBALS { int n = 2; } PROGRAM { int r = switch (n) { case 1: { 10 } case 1 + 1: { 20 } default: { 0 } }; }") ; 20
+;; (scan&parse "GLOBALS { int n = 5; } PROGRAM { int r = 1 + switch (n) { default: { 7 } }; }") ; 8
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA if/else
 ;; ============================================================================
