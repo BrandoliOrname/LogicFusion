@@ -306,6 +306,7 @@
         (cases tipo-compuesto tc
           (lista-tipo (t) (list? valor))
           (vector-tipo (t) (vector? valor))
+          (proc-tipo () (procedimiento? valor))
           (else (eopl:error 'validar-tipo "tipo compuesto ~s no soportado" tc)))))))
 
 (define evaluar-dato-primitivo
@@ -627,7 +628,7 @@
 ; nombre-tipo-valor:
 ; Proposito:
 ; V -> S : Retorna el nombre del tipo de LogicFusion al que corresponde un
-; valor ("int", "float", "bool", "string", "list" o "vector"). Se usa para que
+; valor ("int", "float", "bool", "string", "list", "vector" o "proc"). Se usa para que
 ; los mensajes de error hablen en terminos del lenguaje y no de Racket.
 (define nombre-tipo-valor
   (lambda (valor)
@@ -638,6 +639,7 @@
       ((string? valor) "string")
       ((list? valor) "list")
       ((vector? valor) "vector")
+      ((procedimiento? valor) "proc")
       (else "desconocido"))))
 
 ; mostrar-valor:
