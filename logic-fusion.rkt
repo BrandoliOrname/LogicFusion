@@ -142,7 +142,14 @@
     (dato-primitivo (texto) cadena-lit)
     (dato-primitivo ("True") true-lit)
     (dato-primitivo ("False") false-lit)
-    (dato-primitivo (identificador) variable-exp)
+
+    ;; Identificador: variable (x) o invocacion de procedimiento (f(a, b)).
+    ;; Se factoriza (como contenido-parentesis) porque ambas empiezan con
+    ;; identificador: el token siguiente decide. Por eso el identificador ya
+    ;; no esta en dato-primitivo (antes era la variante variable-exp).
+    (operando (identificador resto-identificador) operando-identificador)
+    (resto-identificador () acceso-variable)
+    (resto-identificador ("(" (separated-list expresion ",") ")") invocacion)
 
     ;; Expresiones de lista
     ; 1. empty
@@ -316,7 +323,6 @@
       (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
       (true-lit () #t)
       (false-lit () #f)
-      (variable-exp (id) (aplicar-ambiente amb id))
     )))
 
 
@@ -345,6 +351,12 @@
   (lambda (dato-operando amb)
     (cases operando dato-operando
       (operando-primitivo (dato) (evaluar-dato-primitivo dato amb))
+      ;; x -> lee la variable; f(a, b) -> invoca el procedimiento f
+      (operando-identificador (id resto)
+        (cases resto-identificador resto
+          (acceso-variable () (aplicar-ambiente amb id))
+          (invocacion (argumentos)
+            (evaluar-invocacion id argumentos amb))))
       (operando-parentesis (contenido)
         (cases contenido-parentesis contenido
           (contenido-vacio () '())
@@ -408,6 +420,24 @@
       (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
                      
       )))
+
+; evaluar-invocacion:
+; Proposito:
+; Sym x L(E) x Amb -> V : Busca el identificador en el ambiente. Si su valor no
+; es un procedimiento lanza un error (por ejemplo int f = 2; f(1)). Si lo es,
+; evalua los argumentos de izquierda a derecha y lo aplica con
+; aplicar-procedimiento.
+(define evaluar-invocacion
+  (lambda (id argumentos amb)
+    (let ((proc (aplicar-ambiente amb id)))
+      (if (procedimiento? proc)
+          (aplicar-procedimiento
+           proc
+           (map (lambda (arg) (evaluar-expresion arg amb)) argumentos)
+           id)
+          (eopl:error 'evaluar-invocacion
+                      "~a no es un procedimiento, es un ~a (~a)"
+                      id (nombre-tipo-valor proc) (mostrar-valor proc))))))
 
 ;; Evalúa en orden y conserva el valor de la última expresión del cuerpo.
 ;; evaluar-secuencia, más abajo, se ocupa de la precedencia de operadores.
