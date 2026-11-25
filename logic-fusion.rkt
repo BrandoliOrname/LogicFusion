@@ -151,6 +151,12 @@
     (resto-identificador () acceso-variable)
     (resto-identificador ("(" (separated-list expresion ",") ")") invocacion)
 
+    ;; Procedimiento como valor (clausura). Se define como una variable de
+    ;; tipo proc: proc f = lambda (int x, float y) { return x * y; };
+    (operando ("lambda" "(" (separated-list tipo identificador ",") ")"
+               "{" "return" expresion ";" "}")
+              operando-lambda)
+
     ;; Expresiones de lista
     ; 1. empty
     (operando ("empty") lista-vacia)
@@ -357,6 +363,9 @@
           (acceso-variable () (aplicar-ambiente amb id))
           (invocacion (argumentos)
             (evaluar-invocacion id argumentos amb))))
+      ;; lambda crea la clausura con el ambiente actual (alcance estatico)
+      (operando-lambda (tipos parametros cuerpo)
+        (clausura tipos parametros cuerpo amb))
       (operando-parentesis (contenido)
         (cases contenido-parentesis contenido
           (contenido-vacio () '())
