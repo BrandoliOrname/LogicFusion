@@ -247,14 +247,33 @@
 
 ;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
 ;es por ello que usamos ambos en cases
-;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
-(define evaluar-programa 
+;El resultado del programa es lo que retorna el procedimiento main (debe estar definido).
+(define evaluar-programa
   (lambda(pgm)
     (cases programa pgm
       (un-programa (global-defs program-defs)
                    (let* ((ambiente-globales (recorrer-lista-definicion global-defs (ambiente-vacio)))
                           (ambiente-final (recorrer-lista-definicion program-defs ambiente-globales)))
-                     (obtener-ultimo-valor ambiente-final))))))
+                     (invocar-main ambiente-final))))))
+
+; invocar-main:
+; Proposito:
+; Amb -> V : Busca main en el ambiente final del programa y lo invoca sin
+; argumentos; retorna su valor de retorno. Si main no existe o no es un
+; procedimiento lanza un error.
+(define invocar-main
+  (lambda (amb)
+    (if (existe-ligadura? amb 'main)
+        (let ((main (aplicar-ambiente amb 'main)))
+          (if (procedimiento? main)
+              (aplicar-procedimiento main '() 'main)
+              (eopl:error 'evaluar-programa
+                          "main debe ser un procedimiento, es un ~a (~a)"
+                          (nombre-tipo-valor main) (mostrar-valor main))))
+        (eopl:error 'evaluar-programa
+                    "El programa no tiene un procedimiento main. Definelo asi: proc main = lambda () { return ...; };"))))
+
+;Provisional: ya no se usa (el resultado ahora es el de main). Pendiente decidir si se borra.
 
 (define obtener-ultimo-valor
   (lambda (amb)
@@ -902,6 +921,20 @@
     (deref (aplicar-ambiente-referencia amb simbolo))
     )
   )
+
+; existe-ligadura?:
+; Proposito:
+; Amb x Sym -> B : Retorna #t si el simbolo esta ligado en algun eslabon del
+; ambiente y #f si no. Recorre igual que aplicar-ambiente-referencia, pero sin
+; lanzar error (lo usa invocar-main para dar un mensaje claro).
+(define existe-ligadura?
+  (lambda (amb simbolo)
+    (cases ambiente amb
+      (ambiente-vacio () #f)
+      (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
+        (if (number? (rib-find-position simbolo simbolos))
+            #t
+            (existe-ligadura? amb-anterior simbolo))))))
 
 ;funcion auxiliar para armar la lista que nos ayuda a setear/asignar "->". Es "hermana" de aplicar-ambiente-referencia, solo cambia lo que retorna
 (define buscar-ligadura-para-modificar
