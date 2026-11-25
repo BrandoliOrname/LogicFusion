@@ -295,13 +295,81 @@
       (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
                           (deref (a-ref 0 valores))))))
         
+; recorrer-lista-definicion:
+; Proposito:
+; L(Def) x Amb -> Amb : Evalua las definiciones de un bloque (GLOBALS, PROGRAM o
+; LOCALS) en orden, cada una en un eslabon nuevo, y retorna el ambiente final.
+; Los procedimientos definidos con lambda en el bloque ven todo lo que se ha
+; definido en el bloque hasta el momento (recursion y recursion mutua).
 (define recorrer-lista-definicion
   (lambda (defs amb)
-    (if (null? defs) amb
-        (recorrer-lista-definicion (cdr defs) (evaluar-definicion (car defs) amb))
-    )
-  )
- )
+    (recorrer-definiciones-bloque defs amb '())))
+
+; recorrer-definiciones-bloque:
+; Proposito:
+; L(Def) x Amb x L(Par) -> Amb : Hace el recorrido de recorrer-lista-definicion.
+; pendientes es la lista de procedimientos del bloque definidos con lambda, como
+; pares (vector-de-valores . clausura-que-se-guardo). Despues de cada definicion,
+; todas esas clausuras se re-apuntan al ambiente mas reciente con
+; reapuntar-clausuras. Asi, si esPar llama a esImpar y esImpar se define despues,
+; cuando esImpar ya existe la clausura de esPar tambien la ve.
+(define recorrer-definiciones-bloque
+  (lambda (defs amb pendientes)
+    (if (null? defs)
+        amb
+        (let* ((nuevo (evaluar-definicion (car defs) amb))
+               (pendientes-con-nueva
+                (if (definicion-lambda? (car defs))
+                    (let ((valores (valores-eslabon nuevo)))
+                      (cons (cons valores (vector-ref valores 0)) pendientes))
+                    pendientes)))
+          (recorrer-definiciones-bloque (cdr defs)
+                                        nuevo
+                                        (reapuntar-clausuras pendientes-con-nueva nuevo))))))
+
+; reapuntar-clausuras:
+; Proposito:
+; L(Par) x Amb -> L(Par) : Para cada par (vector . clausura), si el vector todavia
+; guarda esa misma clausura (eq?), la reemplaza (vector-set!) por una igual cuyo
+; ambiente es amb, y retorna la lista con las clausuras nuevas. Es la idea de
+; extend-env-recursively: se crea el eslabon y despues se guarda en el vector la
+; clausura que apunta a el. Si el vector ya tiene otro valor (alguien le hizo set
+; a la variable), ese par se descarta: no se toca un valor que no creo el lambda.
+(define reapuntar-clausuras
+  (lambda (pendientes amb)
+    (if (null? pendientes)
+        '()
+        (let ((valores (car (car pendientes)))
+              (anterior (cdr (car pendientes))))
+          (if (eq? (vector-ref valores 0) anterior)
+              (let ((nueva (cambiar-ambiente-clausura anterior amb)))
+                (begin
+                  (vector-set! valores 0 nueva)
+                  (cons (cons valores nueva)
+                        (reapuntar-clausuras (cdr pendientes) amb))))
+              (reapuntar-clausuras (cdr pendientes) amb))))))
+
+; definicion-lambda?:
+; Proposito:
+; Def -> B : Retorna #t si la expresion de la definicion (variable o constante)
+; es un lambda escrito directamente (ver es-lambda?).
+(define definicion-lambda?
+  (lambda (def)
+    (cases definicion def
+      (variable-definicion (tipo identificador expresion) (es-lambda? expresion))
+      (constante-definicion (tipo identificador expresion) (es-lambda? expresion)))))
+
+; valores-eslabon:
+; Proposito:
+; Amb -> Vector : Retorna el vector de valores del primer eslabon de un ambiente
+; extendido (el que acaba de crear evaluar-definicion).
+(define valores-eslabon
+  (lambda (amb)
+    (cases ambiente amb
+      (ambiente-vacio ()
+        (eopl:error 'valores-eslabon "ambiente vacio"))
+      (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
+        valores))))
 
 
 (define evaluar-definicion
@@ -311,16 +379,14 @@
                            (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
                              ;si la validacion es correcta, extiende el ambiente
                              (if (validar-tipo tipo valor-inicial)
-                                 (extender-ambiente-definicion tipo identificador valor-inicial #f
-                                                               (es-lambda? expresion) ambiente)
+                                 (extender-ambiente-definicion tipo identificador valor-inicial #f ambiente)
 
                                 (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
                             (let ((valor-constante (evaluar-expresion expresion ambiente)))
                               (if (validar-tipo tipo valor-constante)
-                                  (extender-ambiente-definicion tipo identificador valor-constante #t
-                                                                (es-lambda? expresion) ambiente)
+                                  (extender-ambiente-definicion tipo identificador valor-constante #t ambiente)
 
                                   (eopl:error 'evaluar-definicion "La constante ~s es de tipo ~s y recibio ~s" identificador tipo valor-constante)))))
                             )
@@ -328,24 +394,13 @@
 
 ; extender-ambiente-definicion:
 ; Proposito:
-; T x Sym x V x B x B x Amb -> Amb : Crea el eslabon de una definicion (una sola
-; ligadura) sobre el ambiente recibido. Si la definicion se escribio con un
-; lambda (es-lambda #t), reemplaza la clausura por una igual cuyo ambiente es el
-; eslabon nuevo, para que el procedimiento se vea a si mismo y pueda ser
-; recursivo. Es la misma idea de extend-env-recursively: primero se crea el
-; eslabon con su vector y despues se guarda en ese vector la clausura que apunta
-; al eslabon (vector-set!). Una clausura que viene de otra parte (por ejemplo la
-; que retorna una invocacion, proc f = g(5);) NO se toca: perderia su ambiente.
+; T x Sym x V x B x Amb -> Amb : Crea el eslabon de una definicion (una sola
+; ligadura) sobre el ambiente recibido. La recursion de los procedimientos no se
+; resuelve aqui sino en recorrer-definiciones-bloque, que conoce todo el bloque.
 (define extender-ambiente-definicion
-  (lambda (tipo id valor es-constante es-lambda amb)
-    (let* ((valores (vector valor))
-           (nuevo (ambiente-extendido (vector tipo) (list id) valores
-                                      (vector es-constante) amb)))
-      (if es-lambda
-          (begin
-            (vector-set! valores 0 (cambiar-ambiente-clausura valor nuevo))
-            nuevo)
-          nuevo))))
+  (lambda (tipo id valor es-constante amb)
+    (ambiente-extendido (vector tipo) (list id) (vector valor)
+                        (vector es-constante) amb)))
 
 ; es-lambda?:
 ; Proposito:
@@ -1155,6 +1210,10 @@
 ;; (scan&parse "GLOBALS { proc square = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return square(2) + square(3); }; }") ; 13
 ;; Recursion:
 ;; (scan&parse "GLOBALS { proc factorial = lambda (int n) { return if (n <= 1) { 1 } else { n * factorial(n ~ 1) }; }; } PROGRAM { proc main = lambda () { return factorial(5); }; }") ; 120
+;; Recursion mutua (esPar llama a esImpar, definido despues, y viceversa):
+;; (scan&parse "GLOBALS { proc esPar = lambda (int n) { return if (n == 0) { True } else { esImpar(n ~ 1) }; }; proc esImpar = lambda (int n) { return if (n == 0) { False } else { esPar(n ~ 1) }; }; } PROGRAM { proc main = lambda () { return esPar(4); }; }") ; True
+;; Procedimiento que retorna un procedimiento (la clausura conserva n = 5):
+;; (scan&parse "GLOBALS { proc sumador = lambda (int n) { return lambda (int x) { return x + n; }; }; proc mas5 = sumador(5); } PROGRAM { proc main = lambda () { return mas5(10); }; }") ; 15
 ;; Orden superior (parametro de tipo proc):
 ;; (scan&parse "GLOBALS { proc doble = lambda (int x) { return x * 2; }; proc aplicar = lambda (proc g, int x) { return g(x); }; } PROGRAM { proc main = lambda () { return aplicar(doble, 7); }; }") ; 14
 ;; LOCALS dentro de un procedimiento (triangle de la guia):
