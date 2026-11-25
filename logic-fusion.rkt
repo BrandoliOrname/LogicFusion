@@ -876,6 +876,61 @@
   )
 
 ;; ============================================================================
+;; PROCEDIMIENTOS
+;; ============================================================================
+;; Un procedimiento es un valor (clausura): guarda los tipos y nombres de sus
+;; parametros, su cuerpo y el ambiente donde se creo (alcance estatico).
+;; Basado en procval / closure / apply-procval del interpretador del curso.
+
+(define-datatype procedimiento procedimiento?
+  (clausura (tipos (list-of tipo?))          ; tipo declarado de cada parametro
+            (parametros (list-of symbol?))   ; nombres de los parametros
+            (cuerpo expresion?)              ; expresion despues de return
+            (amb ambiente?)))                ; ambiente donde se creo
+
+; aplicar-procedimiento:
+; Proposito:
+; Proc x L(V) x Sym -> V : Invoca un procedimiento con los argumentos ya
+; evaluados. Verifica la cantidad de argumentos y el tipo de cada uno, crea un
+; eslabon nuevo con los parametros (mutables) sobre el ambiente de la clausura
+; y evalua el cuerpo ahi. El simbolo es el nombre del procedimiento, solo se usa
+; en los mensajes de error. Paso por valor: el vector del eslabon es nuevo, asi
+; que asignar un parametro no cambia la variable de quien invoca.
+(define aplicar-procedimiento
+  (lambda (proc argumentos nombre)
+    (cases procedimiento proc
+      (clausura (tipos parametros cuerpo amb)
+        (if (not (= (length parametros) (length argumentos)))
+            (eopl:error 'aplicar-procedimiento
+                        "El procedimiento ~a espera ~a argumento(s) y recibio ~a"
+                        nombre (length parametros) (length argumentos))
+            (begin
+              (validar-argumentos tipos parametros argumentos nombre)
+              (evaluar-expresion cuerpo
+                                 (ambiente-extendido
+                                  (list->vector tipos)
+                                  parametros
+                                  (list->vector argumentos)
+                                  (make-vector (length parametros) #f)
+                                  amb))))))))
+
+; validar-argumentos:
+; Proposito:
+; L(T) x L(Sym) x L(V) x Sym -> B : Recorre en paralelo los tipos, los nombres
+; de los parametros y los argumentos. Si algun argumento no coincide con el tipo
+; de su parametro lanza un error; si todos coinciden retorna #t.
+(define validar-argumentos
+  (lambda (tipos parametros argumentos nombre)
+    (cond
+      ((null? tipos) #t)
+      ((validar-tipo (car tipos) (car argumentos))
+       (validar-argumentos (cdr tipos) (cdr parametros) (cdr argumentos) nombre))
+      (else
+       (eopl:error 'aplicar-procedimiento
+                   "El parametro ~a del procedimiento ~a es de tipo ~s y recibio ~a"
+                   (car parametros) nombre (car tipos) (mostrar-valor (car argumentos)))))))
+
+;; ============================================================================
 ;; FUNCIONES AUXILIARES
 ;; ============================================================================
 
