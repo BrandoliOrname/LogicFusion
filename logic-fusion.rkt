@@ -9,6 +9,8 @@
 ;;
 ;; programa     ::= "GLOBALS" "{" { definicion } "}"
 ;;                  "PROGRAM" "{" { definicion } "}"
+;;   El resultado del programa es el valor que retorna main, que debe
+;;   definirse como un proc sin parametros: proc main = lambda () { return e; };
 ;;
 ;; definicion   ::= tipo identificador "=" expresion ";"
 ;;                | "const" tipo identificador "=" expresion ";"
@@ -24,6 +26,9 @@
 ;;                | "set" identificador "->" expresion
 ;;
 ;; operando     ::= dato-primitivo
+;;                | identificador resto-identificador
+;;                | "lambda" "(" { tipo identificador "," } ")"
+;;                  "{" "return" expresion ";" "}"
 ;;                | "if" "(" expresion ")" "{" expresion "}"
 ;;                  "else" "{" expresion "}"
 ;;                | primitiva-unaria "(" expresion ")"
@@ -44,8 +49,10 @@
 ;;   () es lista vacía, (e) agrupa, (e,) es lista de un elemento y
 ;;   (e1, e2, ...) es lista de varios elementos.
 ;;
+;; resto-identificador ::= <vacio>                          (variable: x)
+;;                       | "(" { expresion "," } ")"        (invocacion: f(a, b))
+;;
 ;; dato-primitivo ::= entero | decimal | texto | "True" | "False"
-;;                  | identificador
 ;;
 ;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
 ;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
@@ -57,6 +64,11 @@
 ;; Nota: "set" es expresión, no operando (menor precedencia, como en C).
 ;; Dentro de una operación va entre paréntesis: 1 + (set y -> 5).
 ;; "if" si es operando: 1 + if (c) { 2 } else { 3 } es válido.
+;;
+;; Procedimientos (adaptacion de la guia): todos se definen igual, main incluido,
+;;   proc f = lambda (int x, float y) { return e; };
+;; El cuerpo es una sola expresion; para varias se usa return BLOCK {...}; o
+;; return LOCALS {...} {...};. Los procedimientos son recursivos (no mutuamente).
 ;;
 ;; ============================================================================
 
@@ -1107,6 +1119,36 @@
       ((valores-iguales? valor (evaluar-expresion (car casos) amb))
        (evaluar-expresion (car cuerpos) amb))
       (else (evaluar-switch valor (cdr casos) (cdr cuerpos) cuerpo-default amb)))))
+
+;; ============================================================================
+;; NOTA: desde que existe main, el valor de un programa es lo que retorna main.
+;; Los ejemplos de abajo que no definen main muestran el parseo de cada
+;; produccion; el valor anotado es el de la expresion de la ultima definicion.
+;; ============================================================================
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA PROCEDIMIENTOS, INVOCACION Y main
+;; ============================================================================
+;; operando-lambda + main:
+;; (scan&parse "GLOBALS { int a = 4; proc square = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return square(a); }; }") ; 16
+;; Varios parametros:
+;; (scan&parse "GLOBALS { proc suma = lambda (int x, float y) { return x + y; }; } PROGRAM { proc main = lambda () { return suma(1, 2.5); }; }") ; 3.5
+;; Invocacion dentro de una operacion:
+;; (scan&parse "GLOBALS { proc square = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return square(2) + square(3); }; }") ; 13
+;; Recursion:
+;; (scan&parse "GLOBALS { proc factorial = lambda (int n) { return if (n <= 1) { 1 } else { n * factorial(n ~ 1) }; }; } PROGRAM { proc main = lambda () { return factorial(5); }; }") ; 120
+;; Orden superior (parametro de tipo proc):
+;; (scan&parse "GLOBALS { proc doble = lambda (int x) { return x * 2; }; proc aplicar = lambda (proc g, int x) { return g(x); }; } PROGRAM { proc main = lambda () { return aplicar(doble, 7); }; }") ; 14
+;; LOCALS dentro de un procedimiento (triangle de la guia):
+;; (scan&parse "GLOBALS { float base = 10.5; proc triangle = lambda (float base, float height) { return LOCALS { float area = 0; } { set area -> base * height / 2; area; }; }; } PROGRAM { proc main = lambda () { return triangle(base, 6.4); }; }") ; 33.6
+;; Paso por valor (x global sigue en 5):
+;; (scan&parse "GLOBALS { int x = 5; proc cambiar = lambda (int x) { return BLOCK { set x -> 99; x; }; }; } PROGRAM { proc main = lambda () { return BLOCK { cambiar(x); x; }; }; }") ; 5
+;; Errores:
+;; (scan&parse "GLOBALS { } PROGRAM { }")                                                   ; error: no hay main
+;; (scan&parse "GLOBALS { int f = 2; } PROGRAM { proc main = lambda () { return f(2, 1); }; }") ; error: f no es un procedimiento
+;; (scan&parse "GLOBALS { proc sq = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return sq(1, 2); }; }") ; error: cantidad de argumentos
+;; (scan&parse "GLOBALS { proc sq = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return sq(\"hola\"); }; }") ; error: tipo del argumento
+;; (scan&parse "GLOBALS { proc p = 5; } PROGRAM { }")                                       ; error: tipo proc
 
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
