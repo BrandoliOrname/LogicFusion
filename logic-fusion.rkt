@@ -13,27 +13,50 @@
 ;; definicion   ::= tipo identificador "=" expresion ";"
 ;;                | "const" tipo identificador "=" expresion ";"
 ;;
-;; tipo         ::= "int" | "float" | "string" | "bool" | "void" | "sat"
-;;                | "proc" < nombre > = "lambda" "(" < tipos >< parametros > ")" "{" "return" < cuerpo > "}"
-;;                | "list" "<" tipo ">"
-;;                | "vector" "<" tipo ">"
-;;                | "dict" "<" tipo "," tipo ">"
+;; tipo           ::= tipo-primitivo | tipo-compuesto
+;; tipo-primitivo ::= "int" | "float" | "string" | "bool" | "void"
+;; tipo-compuesto ::= "sat" | "proc"
+;;                  | "list" "<" tipo-primitivo ">"
+;;                  | "vector" "<" tipo-primitivo ">"
+;;                  | "dict" "<" tipo-primitivo "," tipo-primitivo ">"
 ;;
 ;; expresion    ::= operando { primitiva-binaria operando }
 ;;                | "set" identificador "->" expresion
-;; operando        ::= dato-primitivo | primitiva-unaria "(" expresion ")"
-;;                | "(" contenido-parentesis ")" | operaciones de listas
+;;
+;; operando     ::= dato-primitivo
+;;                | "if" "(" expresion ")" "{" expresion "}"
+;;                  "else" "{" expresion "}"
+;;                | primitiva-unaria "(" expresion ")"
+;;                | "(" contenido-parentesis ")"
+;;                | "empty" | "empty?" "(" expresion ")"
+;;                | "make-list" "(" expresion "," expresion ")"
+;;                | "list?" "(" expresion ")"
+;;                | "head" "(" expresion ")" | "tail" "(" expresion ")"
+;;                | "append" "(" expresion "," expresion ")"
+;;                | "ref-list" "(" expresion "," expresion ")"
+;;                | "length" "(" expresion ")"
 ;;                | "BLOCK" "{" expresion ";" { expresion ";" } "}"
 ;;                | "LOCALS" "{" definicion { definicion } "}"
 ;;                  "{" expresion ";" { expresion ";" } "}"
-;; () es lista vacía, (e) agrupa, (e,) es lista de un elemento y
-;; (e1, e2, ...) es lista de varios elementos.
+;;
+;; contenido-parentesis ::= <vacio> | expresion resto-parentesis
+;; resto-parentesis     ::= <vacio> | "," { expresion "," }
+;;   () es lista vacía, (e) agrupa, (e,) es lista de un elemento y
+;;   (e1, e2, ...) es lista de varios elementos.
+;;
+;; dato-primitivo ::= entero | decimal | texto | "True" | "False"
+;;                  | identificador
 ;;
 ;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
 ;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
+;;   Precedencia (de mayor a menor): * /  >  + ~  >  concat  >  comparaciones.
+;;   Asociatividad a izquierda. Las comparaciones no se encadenan.
 ;;
 ;; primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
-
+;;
+;; Nota: "set" es expresión, no operando (menor precedencia, como en C).
+;; Dentro de una operación va entre paréntesis: 1 + (set y -> 5).
+;; "if" si es operando: 1 + if (c) { 2 } else { 3 } es válido.
 ;;
 ;; ============================================================================
 
@@ -144,9 +167,10 @@
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
     
-    ;; Condicional if/else (cada rama es una expresion)
-    (expresion ("if" "(" expresion ")" "{" expresion "}"
-                "else" "{" expresion "}") if-exp)
+    ;; Condicional if/else (cada rama es una expresion). Es un operando, como
+    ;; BLOCK y LOCALS, para poder usarlo dentro de operaciones: 1 + if (...) {...} else {...}
+    (operando ("if" "(" expresion ")" "{" expresion "}"
+               "else" "{" expresion "}") operando-condicional)
     
     ;; BLOCK y LOCALS requieren un cuerpo con al menos una expresión.
     ;; LOCALS requiere al menos una definición.
@@ -301,10 +325,6 @@
     (cases expresion exp
       (asignar-expresion (id expresion)
         (aplicar-asignacion id amb (evaluar-expresion expresion amb)))
-      (if-exp (condicion rama-verdadera rama-falsa)
-              (if (valor-verdad? (evaluar-expresion condicion amb))
-                  (evaluar-expresion rama-verdadera amb)
-                  (evaluar-expresion rama-falsa amb)))
       (expresion-operaciones (primero operaciones)
         (let* ((valor-inicial (evaluar-operando primero amb))
                (valores-adicionales
@@ -333,6 +353,10 @@
               (elementos-lista (otras)
                 (cons (evaluar-expresion primera amb)
                       (map (lambda (e) (evaluar-expresion e amb)) otras)))))))
+      (operando-condicional (condicion rama-verdadera rama-falsa)
+        (if (valor-verdad? (evaluar-expresion condicion amb))
+            (evaluar-expresion rama-verdadera amb)
+            (evaluar-expresion rama-falsa amb)))
       (bloque-expresion (primera restantes)
         (evaluar-cuerpo-secuencia primera restantes amb))
       (locales-expresion (primera-def otras-defs primera-exp otras-exps)
@@ -569,10 +593,21 @@
        (comparar-numeros operador valor1 valor2))
       ((and (boolean? valor1) (boolean? valor2))
        (comparar-numeros operador (if valor1 1 0) (if valor2 1 0)))
+      ;; Un bool contra un numero casi siempre viene de encadenar comparaciones
+      ;; (1 < 2 < 3 se evalua como (1 < 2) < 3 = True < 3), por eso se explica.
+      ((or (and (boolean? valor1) (number? valor2))
+           (and (number? valor1) (boolean? valor2)))
+       (eopl:error 'evaluar-primitiva-binaria
+                   "La comparacion ~a no se puede aplicar entre un ~a (~a) y un ~a (~a). Las comparaciones no se encadenan: 1 < 2 < 3 se evalua como (1 < 2) < 3, es decir True < 3. Usa una sola comparacion por expresion."
+                   operador
+                   (nombre-tipo-valor valor1) (mostrar-valor valor1)
+                   (nombre-tipo-valor valor2) (mostrar-valor valor2)))
       (else
        (eopl:error 'evaluar-primitiva-binaria
-                   "La primitiva ~s solo compara int, float o bool del mismo tipo, se recibio: ~s y ~s"
-                   operador valor1 valor2)))))
+                   "La comparacion ~a solo acepta int, float o bool del mismo tipo; se recibio un ~a (~a) y un ~a (~a)."
+                   operador
+                   (nombre-tipo-valor valor1) (mostrar-valor valor1)
+                   (nombre-tipo-valor valor2) (mostrar-valor valor2))))))
 
 ; comparar-numeros:
 ; Proposito:
@@ -588,6 +623,35 @@
       ((equal? '== operador) (=  n1 n2))
       ((equal? '!= operador) (not (= n1 n2)))
       (else (eopl:error 'condicional? "Operador no soportado ~s" operador)))))
+
+; nombre-tipo-valor:
+; Proposito:
+; V -> S : Retorna el nombre del tipo de LogicFusion al que corresponde un
+; valor ("int", "float", "bool", "string", "list" o "vector"). Se usa para que
+; los mensajes de error hablen en terminos del lenguaje y no de Racket.
+(define nombre-tipo-valor
+  (lambda (valor)
+    (cond
+      ((entero? valor) "int")
+      ((real? valor) "float")
+      ((boolean? valor) "bool")
+      ((string? valor) "string")
+      ((list? valor) "list")
+      ((vector? valor) "vector")
+      (else "desconocido"))))
+
+; mostrar-valor:
+; Proposito:
+; V -> V : Prepara un valor para mostrarlo en un mensaje de error con la
+; sintaxis de LogicFusion: #t como True, #f como False y las cadenas entre
+; comillas. Los demas valores se retornan tal cual.
+(define mostrar-valor
+  (lambda (valor)
+    (cond
+      ((eq? valor #t) "True")
+      ((eq? valor #f) "False")
+      ((string? valor) (string-append "\"" valor "\""))
+      (else valor))))
 
 ; es-multiplicacion-division?:
 ; Proposito:
@@ -963,6 +1027,7 @@
 ;; (scan&parse "GLOBALS { int edad = 20; } PROGRAM { string r = if (edad >= 18) { \"Mayor de edad\" } else { \"Menor de edad\" }; }") ; "Mayor de edad"
 ;; (scan&parse "GLOBALS { int edad = 15; } PROGRAM { string r = if (edad < 13) { \"Nino\" } else { if (edad < 18) { \"Adolescente\" } else { \"Adulto\" } }; }") ; "Adolescente" (anidado)
 ;; (scan&parse "GLOBALS { } PROGRAM { int r = if (0) { 1 } else { 2 }; }") ; 2 (0 es falso)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = 10 + if (True) { 1 } else { 2 } * 3; }") ; 13 (if como operando)
 ;; ============================================================================
 ;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
 (define logicfusion-interpretador
