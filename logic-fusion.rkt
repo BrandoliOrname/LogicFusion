@@ -1050,6 +1050,13 @@
 ;; (scan&parse "GLOBALS { int n = 2; } PROGRAM { int r = switch (n) { case 1: { 10 } case 1 + 1: { 20 } default: { 0 } }; }") ; 20
 ;; (scan&parse "GLOBALS { int n = 5; } PROGRAM { int r = 1 + switch (n) { default: { 7 } }; }") ; 8
 ;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA if/else
+;; ============================================================================
+;; (scan&parse "GLOBALS { int edad = 20; } PROGRAM { string r = if (edad >= 18) { \"Mayor de edad\" } else { \"Menor de edad\" }; }") ; "Mayor de edad"
+;; (scan&parse "GLOBALS { int edad = 15; } PROGRAM { string r = if (edad < 13) { \"Nino\" } else { if (edad < 18) { \"Adolescente\" } else { \"Adulto\" } }; }") ; "Adolescente" (anidado)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = if (0) { 1 } else { 2 }; }") ; 2 (0 es falso)
+;; (scan&parse "GLOBALS { } PROGRAM { int r = 10 + if (True) { 1 } else { 2 } * 3; }") ; 13 (if como operando)
+;; ============================================================================
 ;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
 (define logicfusion-interpretador
   (sllgen:make-rep-loop  "-->" evaluar-programa
