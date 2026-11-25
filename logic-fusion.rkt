@@ -311,14 +311,16 @@
                            (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
                              ;si la validacion es correcta, extiende el ambiente
                              (if (validar-tipo tipo valor-inicial)
-                                 (extender-ambiente-definicion tipo identificador valor-inicial #f ambiente)
+                                 (extender-ambiente-definicion tipo identificador valor-inicial #f
+                                                               (es-lambda? expresion) ambiente)
 
                                 (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
                             (let ((valor-constante (evaluar-expresion expresion ambiente)))
                               (if (validar-tipo tipo valor-constante)
-                                  (extender-ambiente-definicion tipo identificador valor-constante #t ambiente)
+                                  (extender-ambiente-definicion tipo identificador valor-constante #t
+                                                                (es-lambda? expresion) ambiente)
 
                                   (eopl:error 'evaluar-definicion "La constante ~s es de tipo ~s y recibio ~s" identificador tipo valor-constante)))))
                             )
@@ -326,22 +328,38 @@
 
 ; extender-ambiente-definicion:
 ; Proposito:
-; T x Sym x V x B x Amb -> Amb : Crea el eslabon de una definicion (una sola
-; ligadura) sobre el ambiente recibido. Si el valor es un procedimiento, lo
-; reemplaza por una clausura igual cuyo ambiente es el eslabon nuevo, para que
-; el procedimiento se vea a si mismo y pueda ser recursivo. Es la misma idea de
-; extend-env-recursively: primero se crea el eslabon con su vector y despues se
-; guarda en ese vector la clausura que apunta al eslabon (vector-set!).
+; T x Sym x V x B x B x Amb -> Amb : Crea el eslabon de una definicion (una sola
+; ligadura) sobre el ambiente recibido. Si la definicion se escribio con un
+; lambda (es-lambda #t), reemplaza la clausura por una igual cuyo ambiente es el
+; eslabon nuevo, para que el procedimiento se vea a si mismo y pueda ser
+; recursivo. Es la misma idea de extend-env-recursively: primero se crea el
+; eslabon con su vector y despues se guarda en ese vector la clausura que apunta
+; al eslabon (vector-set!). Una clausura que viene de otra parte (por ejemplo la
+; que retorna una invocacion, proc f = g(5);) NO se toca: perderia su ambiente.
 (define extender-ambiente-definicion
-  (lambda (tipo id valor es-constante amb)
+  (lambda (tipo id valor es-constante es-lambda amb)
     (let* ((valores (vector valor))
            (nuevo (ambiente-extendido (vector tipo) (list id) valores
                                       (vector es-constante) amb)))
-      (if (procedimiento? valor)
+      (if es-lambda
           (begin
             (vector-set! valores 0 (cambiar-ambiente-clausura valor nuevo))
             nuevo)
           nuevo))))
+
+; es-lambda?:
+; Proposito:
+; E -> B : Retorna #t si la expresion es solo un lambda (una expresion-operaciones
+; con un unico operando operando-lambda y sin operaciones), y #f en otro caso.
+(define es-lambda?
+  (lambda (exp)
+    (cases expresion exp
+      (expresion-operaciones (primero operaciones)
+        (and (null? operaciones)
+             (cases operando primero
+               (operando-lambda (tipos parametros cuerpo) #t)
+               (else #f))))
+      (else #f))))
 
 ; cambiar-ambiente-clausura:
 ; Proposito:
