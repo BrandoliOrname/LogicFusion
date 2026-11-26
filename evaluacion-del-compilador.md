@@ -33,27 +33,58 @@ Por ejemplo, puede escribir un programa que retorne una lista con los 10 element
 
 ``` logic-fusion
 % Numero
-GLOBALS {} PROGRAM {int numero = 10;}
+GLOBALS {
+	int numero = 10;
+}
+PROGRAM {
+	proc main = lambda () { return numero; };
+}
 10
 
 % Flotante
-GLOBALS {} PROGRAM {float decimal = 5.25;}
+GLOBALS {
+	float decimal = 5.25;
+}
+PROGRAM {
+	proc main = lambda () { return decimal; };
+}
 5.25
 
 % Lista vacia
-GLOBALS {} PROGRAM {list<int> listVacia = (empty);}
+GLOBALS {
+	list<int> listVacia = (empty);
+}
+PROGRAM {
+	proc main = lambda () { return listVacia; };
+}
 ()
 
 % Booelano
-GLOBALS {} PROGRAM {bool activo = True;}
+GLOBALS {
+	bool activo = True;
+}
+PROGRAM {
+	proc main = lambda () { return activo; };
+}
 #t
 
 % Procedimiento
-Falta por implementar
+GLOBALS {
+	proc cuadrado = lambda (int x) { return x * x; };
+}
+PROGRAM {
+	proc main = lambda () { return cuadrado(4); };
+}
+16
 
 % Listas
-GLOBALS {} PROGRAM {list<int> numeros = (1,2,3);}
-(1, 2, 3)
+GLOBALS {
+	list<int> numeros = (1,2,3);
+}
+PROGRAM {
+	proc main = lambda () { return numeros; };
+}
+(1 2 3)
 
 % Diccionarios
 Falta por implementar
@@ -76,13 +107,18 @@ Muestre mediante un solo ejemplo que su **interpretador** es capaz de manejar v
 ### Respuesta
 
 ``` logic-fusion
-GLOBALS { int x = 5; }
-PROGRAM {
-    int r = BLOCK {
-        set x -> 10;
-        x;
-    };
+GLOBALS {
+	int x = 5;
 }
+PROGRAM {
+	proc main = lambda () {
+		return BLOCK {
+			set x -> 10;
+			x;
+		};
+	};
+}
+10
 ```
 
 # ==🟢Pregunta No. 4==
@@ -98,19 +134,27 @@ Muestre mediante dos ejemplos que su **interpretador** es capaz de crear variab
 
 ```logic-fusion
 % Crear constante e imprime el valor
-GLOBALS {} 
-PROGRAM {const int documento = 12345678;}
+GLOBALS {
+	const int documento = 12345678;
+}
+PROGRAM {
+	proc main = lambda () { return documento; };
+}
 12345678
 
 % Crear constante y cambia el valor
-GLOBALS { const int salario = 1750000; }
+GLOBALS {
+	const int salario = 1750000;
+}
 PROGRAM {
-    int nuevo-salario = BLOCK {
-        set salario -> 1600000;
-		salario;
-    };
-}   
-aplicar-asignacion: No se puede cambiar el valor de la constante salario
+	proc main = lambda () {
+		return BLOCK {
+			set salario -> 1600000;
+			salario;
+		};
+	};
+}
+aplicar-asignacion: No se puede cambiar la constante salario
 ```
 
 # ==🟢Pregunta No. 5==
@@ -141,8 +185,12 @@ GLOBALS {
 	int dividir = a / b;
 	int modulo = a % b;
 }
-PROGRAM {list<void> resultado = (sumar, restar, multiplicar, dividir, modulo);}
-(30 -10 200 0 10)
+PROGRAM {
+	proc main = lambda () {
+		return (sumar, restar, multiplicar, dividir);
+	};
+}
+(30 -10 200 0)
 
 % Flotantes
 GLOBALS {
@@ -154,8 +202,12 @@ GLOBALS {
 	float dividir = a / b;
 	float modulo = a % b;
 }
-PROGRAM {list<void> resultado = (sumar, restar, multiplicar, dividir, modulo);}
-(13.5 7.5 31.5 3.5 1.5)
+PROGRAM {
+	proc main = lambda () {
+		return (sumar, restar, multiplicar, dividir);
+	};
+}
+(3.0 2.0 1.25 5.0)
 ```
 
 # ==🟡Pregunta No. 6==
@@ -183,16 +235,17 @@ GLOBALS {
 	bool desigual = a != b; % True
 }
 PROGRAM {
-	list<bool> resultado = 
-	(mayor, menor, mayor-igual, menor-igual, igual, desigual);
+	proc main = lambda () {
+		return (mayor, menor, mayor-igual, menor-igual, igual, desigual);
+	};
 }
 (#f #f #t #t #t #t)
 
 % Booleanos
-GLOBALS {
-	
+GLOBALS {}
+PROGRAM {
+	proc main = lambda () { return ...; };
 }
-PROGRAM {}
 ```
 
 # ==🟢Pregunta No. 7==
@@ -213,7 +266,7 @@ GLOBALS {
 PROGRAM {
 	string saludar = saludo concat " " concat nombre;
 	int caracteres = longitud(saludar);
-	list<void> respuesta = (saludar, caracteres);
+	proc main = lambda () { return (saludar, caracteres); };
 }
 ("Hola Oswaldo" 12)
 ```
@@ -248,11 +301,13 @@ Puede crear las funciones auxiliares que requiera
 
 ### Respuesta
 
-Nos falta crear la estructura de dato vector, diccionario y procedimientos recursivos
+Nos falta crear la estructura de dato vector y diccionario (los procedimientos recursivos ya estan)
 
 ``` logic-fusion
 GLOBALS {}
-PROGRAM {}
+PROGRAM {
+	proc main = lambda () { return ...; };
+}
 ```
 
 # ==🔴Pregunta No. 9==
@@ -267,7 +322,9 @@ Elabore la función "map" en su lenguaje de programación. La función "map" rec
 
 ``` logic-fusion
 GLOBALS {}
-PROGRAM {}
+PROGRAM {
+	proc main = lambda () { return ...; };
+}
 ```
 
 # ==🔴Pregunta No. 10==
@@ -284,7 +341,9 @@ b) contenga un ciclo de repetición **"while"** que itere de 1 a 5 e invoque al 
 
 ``` logic-fusion
 GLOBALS {}
-PROGRAM {}
+PROGRAM {
+	proc main = lambda () { return ...; };
+}
 ```
 
 # ==🔴Pregunta No. 11==
@@ -314,7 +373,7 @@ GLOBALS {
 	string estudiante = "True";
 }
 PROGRAM {
-	void resultado = numero != estudiante; 
+	proc main = lambda () { return numero != estudiante; };
 }
 evaluar-primitiva-binaria: La comparacion != solo acepta int, float o bool del mismo tipo; se recibio un int (10) y un string ("True").
 
@@ -342,7 +401,9 @@ La evaluación se realizará asÍ:
 
 ``` logic-fusion
 GLOBALS {}
-PROGRAM {}
+PROGRAM {
+	proc main = lambda () { return ...; };
+}
 ```
 # ==🔴Pregunta No. 13==
 
@@ -360,5 +421,7 @@ El programa podrá retornar ya sea una lista o un vector o imprimir los valores 
 
 ``` logic-fusion
 GLOBALS {}
-PROGRAM {}
+PROGRAM {
+	proc main = lambda () { return ...; };
+}
 ```

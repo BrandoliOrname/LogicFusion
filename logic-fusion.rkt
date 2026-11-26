@@ -9,6 +9,8 @@
 ;;
 ;; programa     ::= "GLOBALS" "{" { definicion } "}"
 ;;                  "PROGRAM" "{" { definicion } "}"
+;;   El resultado del programa es el valor que retorna main, que debe
+;;   definirse como un proc sin parametros: proc main = lambda () { return e; };
 ;;
 ;; definicion   ::= tipo identificador "=" expresion ";"
 ;;                | "const" tipo identificador "=" expresion ";"
@@ -24,6 +26,9 @@
 ;;                | "set" identificador "->" expresion
 ;;
 ;; operando     ::= dato-primitivo
+;;                | identificador resto-identificador
+;;                | "lambda" "(" { tipo identificador "," } ")"
+;;                  "{" "return" expresion ";" "}"
 ;;                | "if" "(" expresion ")" "{" expresion "}"
 ;;                  "else" "{" expresion "}"
 ;;                | primitiva-unaria "(" expresion ")"
@@ -44,8 +49,10 @@
 ;;   () es lista vacía, (e) agrupa, (e,) es lista de un elemento y
 ;;   (e1, e2, ...) es lista de varios elementos.
 ;;
+;; resto-identificador ::= <vacio>                          (variable: x)
+;;                       | "(" { expresion "," } ")"        (invocacion: f(a, b))
+;;
 ;; dato-primitivo ::= entero | decimal | texto | "True" | "False"
-;;                  | identificador
 ;;
 ;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
 ;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
@@ -57,6 +64,11 @@
 ;; Nota: "set" es expresión, no operando (menor precedencia, como en C).
 ;; Dentro de una operación va entre paréntesis: 1 + (set y -> 5).
 ;; "if" si es operando: 1 + if (c) { 2 } else { 3 } es válido.
+;;
+;; Procedimientos (adaptacion de la guia): todos se definen igual, main incluido,
+;;   proc f = lambda (int x, float y) { return e; };
+;; El cuerpo es una sola expresion; para varias se usa return BLOCK {...}; o
+;; return LOCALS {...} {...};. Los procedimientos son recursivos (no mutuamente).
 ;;
 ;; ============================================================================
 
@@ -142,7 +154,20 @@
     (dato-primitivo (texto) cadena-lit)
     (dato-primitivo ("True") true-lit)
     (dato-primitivo ("False") false-lit)
-    (dato-primitivo (identificador) variable-exp)
+
+    ;; Identificador: variable (x) o invocacion de procedimiento (f(a, b)).
+    ;; Se factoriza (como contenido-parentesis) porque ambas empiezan con
+    ;; identificador: el token siguiente decide. Por eso el identificador ya
+    ;; no esta en dato-primitivo (antes era la variante variable-exp).
+    (operando (identificador resto-identificador) operando-identificador)
+    (resto-identificador () acceso-variable)
+    (resto-identificador ("(" (separated-list expresion ",") ")") invocacion)
+
+    ;; Procedimiento como valor (clausura). Se define como una variable de
+    ;; tipo proc: proc f = lambda (int x, float y) { return x * y; };
+    (operando ("lambda" "(" (separated-list tipo identificador ",") ")"
+               "{" "return" expresion ";" "}")
+              operando-lambda)
 
     ;; Expresiones de lista
     ; 1. empty
@@ -242,14 +267,33 @@
 
 ;un programa solo tiene dos cosas, una lista de definiciones globales o de la definicion de program
 ;es por ello que usamos ambos en cases
-;Más adelante, cuando tengamos proc y main, evaluar-programa invocará a main y lo que se vera será su valor de retorno.
-(define evaluar-programa 
+;El resultado del programa es lo que retorna el procedimiento main (debe estar definido).
+(define evaluar-programa
   (lambda(pgm)
     (cases programa pgm
       (un-programa (global-defs program-defs)
                    (let* ((ambiente-globales (recorrer-lista-definicion global-defs (ambiente-vacio)))
                           (ambiente-final (recorrer-lista-definicion program-defs ambiente-globales)))
-                     (obtener-ultimo-valor ambiente-final))))))
+                     (invocar-main ambiente-final))))))
+
+; invocar-main:
+; Proposito:
+; Amb -> V : Busca main en el ambiente final del programa y lo invoca sin
+; argumentos; retorna su valor de retorno. Si main no existe o no es un
+; procedimiento lanza un error.
+(define invocar-main
+  (lambda (amb)
+    (if (existe-ligadura? amb 'main)
+        (let ((main (aplicar-ambiente amb 'main)))
+          (if (procedimiento? main)
+              (aplicar-procedimiento main '() 'main)
+              (eopl:error 'evaluar-programa
+                          "main debe ser un procedimiento, es un ~a (~a)"
+                          (nombre-tipo-valor main) (mostrar-valor main))))
+        (eopl:error 'evaluar-programa
+                    "El programa no tiene un procedimiento main. Definelo asi: proc main = lambda () { return ...; };"))))
+
+;Provisional: ya no se usa (el resultado ahora es el de main). Pendiente decidir si se borra.
 
 (define obtener-ultimo-valor
   (lambda (amb)
@@ -259,13 +303,81 @@
       (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
                           (deref (a-ref 0 valores))))))
         
+; recorrer-lista-definicion:
+; Proposito:
+; L(Def) x Amb -> Amb : Evalua las definiciones de un bloque (GLOBALS, PROGRAM o
+; LOCALS) en orden, cada una en un eslabon nuevo, y retorna el ambiente final.
+; Los procedimientos definidos con lambda en el bloque ven todo lo que se ha
+; definido en el bloque hasta el momento (recursion y recursion mutua).
 (define recorrer-lista-definicion
   (lambda (defs amb)
-    (if (null? defs) amb
-        (recorrer-lista-definicion (cdr defs) (evaluar-definicion (car defs) amb))
-    )
-  )
- )
+    (recorrer-definiciones-bloque defs amb '())))
+
+; recorrer-definiciones-bloque:
+; Proposito:
+; L(Def) x Amb x L(Par) -> Amb : Hace el recorrido de recorrer-lista-definicion.
+; pendientes es la lista de procedimientos del bloque definidos con lambda, como
+; pares (vector-de-valores . clausura-que-se-guardo). Despues de cada definicion,
+; todas esas clausuras se re-apuntan al ambiente mas reciente con
+; reapuntar-clausuras. Asi, si esPar llama a esImpar y esImpar se define despues,
+; cuando esImpar ya existe la clausura de esPar tambien la ve.
+(define recorrer-definiciones-bloque
+  (lambda (defs amb pendientes)
+    (if (null? defs)
+        amb
+        (let* ((nuevo (evaluar-definicion (car defs) amb))
+               (pendientes-con-nueva
+                (if (definicion-lambda? (car defs))
+                    (let ((valores (valores-eslabon nuevo)))
+                      (cons (cons valores (vector-ref valores 0)) pendientes))
+                    pendientes)))
+          (recorrer-definiciones-bloque (cdr defs)
+                                        nuevo
+                                        (reapuntar-clausuras pendientes-con-nueva nuevo))))))
+
+; reapuntar-clausuras:
+; Proposito:
+; L(Par) x Amb -> L(Par) : Para cada par (vector . clausura), si el vector todavia
+; guarda esa misma clausura (eq?), la reemplaza (vector-set!) por una igual cuyo
+; ambiente es amb, y retorna la lista con las clausuras nuevas. Es la idea de
+; extend-env-recursively: se crea el eslabon y despues se guarda en el vector la
+; clausura que apunta a el. Si el vector ya tiene otro valor (alguien le hizo set
+; a la variable), ese par se descarta: no se toca un valor que no creo el lambda.
+(define reapuntar-clausuras
+  (lambda (pendientes amb)
+    (if (null? pendientes)
+        '()
+        (let ((valores (car (car pendientes)))
+              (anterior (cdr (car pendientes))))
+          (if (eq? (vector-ref valores 0) anterior)
+              (let ((nueva (cambiar-ambiente-clausura anterior amb)))
+                (begin
+                  (vector-set! valores 0 nueva)
+                  (cons (cons valores nueva)
+                        (reapuntar-clausuras (cdr pendientes) amb))))
+              (reapuntar-clausuras (cdr pendientes) amb))))))
+
+; definicion-lambda?:
+; Proposito:
+; Def -> B : Retorna #t si la expresion de la definicion (variable o constante)
+; es un lambda escrito directamente (ver es-lambda?).
+(define definicion-lambda?
+  (lambda (def)
+    (cases definicion def
+      (variable-definicion (tipo identificador expresion) (es-lambda? expresion))
+      (constante-definicion (tipo identificador expresion) (es-lambda? expresion)))))
+
+; valores-eslabon:
+; Proposito:
+; Amb -> Vector : Retorna el vector de valores del primer eslabon de un ambiente
+; extendido (el que acaba de crear evaluar-definicion).
+(define valores-eslabon
+  (lambda (amb)
+    (cases ambiente amb
+      (ambiente-vacio ()
+        (eopl:error 'valores-eslabon "ambiente vacio"))
+      (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
+        valores))))
 
 
 (define evaluar-definicion
@@ -284,20 +396,55 @@
         (eopl:error 'evaluar-definicion
                     "La variable ~s es de tipo ~s y recibio ~s"
                     identificador tipo valor-inicial))))
+                           (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
+                             ;si la validacion es correcta, extiende el ambiente
+                             (if (validar-tipo tipo valor-inicial)
+                                 (extender-ambiente-definicion tipo identificador valor-inicial #f ambiente)
+
+                                (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
                             (let ((valor-constante (evaluar-expresion expresion ambiente)))
                               (if (validar-tipo tipo valor-constante)
-                                  (ambiente-extendido
-                                   (vector tipo)
-                                   (list identificador)
-                                   (vector valor-constante)
-                                   (vector #t)
-                                   ambiente)
+                                  (extender-ambiente-definicion tipo identificador valor-constante #t ambiente)
 
                                   (eopl:error 'evaluar-definicion "La constante ~s es de tipo ~s y recibio ~s" identificador tipo valor-constante)))))
                             )
                           )
+
+; extender-ambiente-definicion:
+; Proposito:
+; T x Sym x V x B x Amb -> Amb : Crea el eslabon de una definicion (una sola
+; ligadura) sobre el ambiente recibido. La recursion de los procedimientos no se
+; resuelve aqui sino en recorrer-definiciones-bloque, que conoce todo el bloque.
+(define extender-ambiente-definicion
+  (lambda (tipo id valor es-constante amb)
+    (ambiente-extendido (vector tipo) (list id) (vector valor)
+                        (vector es-constante) amb)))
+
+; es-lambda?:
+; Proposito:
+; E -> B : Retorna #t si la expresion es solo un lambda (una expresion-operaciones
+; con un unico operando operando-lambda y sin operaciones), y #f en otro caso.
+(define es-lambda?
+  (lambda (exp)
+    (cases expresion exp
+      (expresion-operaciones (primero operaciones)
+        (and (null? operaciones)
+             (cases operando primero
+               (operando-lambda (tipos parametros cuerpo) #t)
+               (else #f))))
+      (else #f))))
+
+; cambiar-ambiente-clausura:
+; Proposito:
+; Proc x Amb -> Proc : Retorna una clausura con los mismos tipos, parametros y
+; cuerpo, pero con el ambiente recibido.
+(define cambiar-ambiente-clausura
+  (lambda (proc nuevo-amb)
+    (cases procedimiento proc
+      (clausura (tipos parametros cuerpo amb)
+        (clausura tipos parametros cuerpo nuevo-amb)))))
 
 ;falta completar con los tipos compuestos y  el caso 2, cuando se modifica en el ambiente (asignar, suponmgo que el set del profesor, nosotros usamos "->")
 (define validar-tipo
@@ -315,6 +462,7 @@
         (cases tipo-compuesto tc
           (lista-tipo (t) (list? valor))
           (vector-tipo (t) (vector? valor))
+          (proc-tipo () (procedimiento? valor))
           (else (eopl:error 'validar-tipo "tipo compuesto ~s no soportado" tc)))))))
 
 (define evaluar-dato-primitivo
@@ -324,7 +472,6 @@
       (cadena-lit (s) (quitar-comillas s)) ; el scanner deja las comillas en el lexema
       (true-lit () #t)
       (false-lit () #f)
-      (variable-exp (id) (aplicar-ambiente amb id))
     )))
 
 
@@ -353,6 +500,15 @@
   (lambda (dato-operando amb)
     (cases operando dato-operando
       (operando-primitivo (dato) (evaluar-dato-primitivo dato amb))
+      ;; x -> lee la variable; f(a, b) -> invoca el procedimiento f
+      (operando-identificador (id resto)
+        (cases resto-identificador resto
+          (acceso-variable () (aplicar-ambiente amb id))
+          (invocacion (argumentos)
+            (evaluar-invocacion id argumentos amb))))
+      ;; lambda crea la clausura con el ambiente actual (alcance estatico)
+      (operando-lambda (tipos parametros cuerpo)
+        (clausura tipos parametros cuerpo amb))
       (operando-parentesis (contenido)
         (cases contenido-parentesis contenido
           (contenido-vacio () '())
@@ -420,6 +576,23 @@
                      
       )))
 
+; evaluar-invocacion:
+; Proposito:
+; Sym x L(E) x Amb -> V : Busca el identificador en el ambiente. Si su valor no
+; es un procedimiento lanza un error (por ejemplo int f = 2; f(1)). Si lo es,
+; evalua los argumentos de izquierda a derecha y lo aplica con
+; aplicar-procedimiento.
+(define evaluar-invocacion
+  (lambda (id argumentos amb)
+    (let ((proc (aplicar-ambiente amb id)))
+      (if (procedimiento? proc)
+          (aplicar-procedimiento
+           proc
+           (map (lambda (arg) (evaluar-expresion arg amb)) argumentos)
+           id)
+          (eopl:error 'evaluar-invocacion
+                      "~a no es un procedimiento, es un ~a (~a)"
+                      id (nombre-tipo-valor proc) (mostrar-valor proc))))))
 
 ;; Evalúa en orden y conserva el valor de la última expresión del cuerpo.
 ;; evaluar-secuencia, más abajo, se ocupa de la precedencia de operadores.
@@ -674,7 +847,7 @@
 ; nombre-tipo-valor:
 ; Proposito:
 ; V -> S : Retorna el nombre del tipo de LogicFusion al que corresponde un
-; valor ("int", "float", "bool", "string", "list" o "vector"). Se usa para que
+; valor ("int", "float", "bool", "string", "list", "vector" o "proc"). Se usa para que
 ; los mensajes de error hablen en terminos del lenguaje y no de Racket.
 (define nombre-tipo-valor
   (lambda (valor)
@@ -685,6 +858,7 @@
       ((string? valor) "string")
       ((list? valor) "list")
       ((vector? valor) "vector")
+      ((procedimiento? valor) "proc")
       (else "desconocido"))))
 
 ; mostrar-valor:
@@ -891,6 +1065,20 @@
     )
   )
 
+; existe-ligadura?:
+; Proposito:
+; Amb x Sym -> B : Retorna #t si el simbolo esta ligado en algun eslabon del
+; ambiente y #f si no. Recorre igual que aplicar-ambiente-referencia, pero sin
+; lanzar error (lo usa invocar-main para dar un mensaje claro).
+(define existe-ligadura?
+  (lambda (amb simbolo)
+    (cases ambiente amb
+      (ambiente-vacio () #f)
+      (ambiente-extendido (tipos simbolos valores es-const amb-anterior)
+        (if (number? (rib-find-position simbolo simbolos))
+            #t
+            (existe-ligadura? amb-anterior simbolo))))))
+
 ;funcion auxiliar para armar la lista que nos ayuda a setear/asignar "->". Es "hermana" de aplicar-ambiente-referencia, solo cambia lo que retorna
 (define buscar-ligadura-para-modificar
   (lambda (amb simbolo)
@@ -922,6 +1110,61 @@
       )
     )
   )
+
+;; ============================================================================
+;; PROCEDIMIENTOS
+;; ============================================================================
+;; Un procedimiento es un valor (clausura): guarda los tipos y nombres de sus
+;; parametros, su cuerpo y el ambiente donde se creo (alcance estatico).
+;; Basado en procval / closure / apply-procval del interpretador del curso.
+
+(define-datatype procedimiento procedimiento?
+  (clausura (tipos (list-of tipo?))          ; tipo declarado de cada parametro
+            (parametros (list-of symbol?))   ; nombres de los parametros
+            (cuerpo expresion?)              ; expresion despues de return
+            (amb ambiente?)))                ; ambiente donde se creo
+
+; aplicar-procedimiento:
+; Proposito:
+; Proc x L(V) x Sym -> V : Invoca un procedimiento con los argumentos ya
+; evaluados. Verifica la cantidad de argumentos y el tipo de cada uno, crea un
+; eslabon nuevo con los parametros (mutables) sobre el ambiente de la clausura
+; y evalua el cuerpo ahi. El simbolo es el nombre del procedimiento, solo se usa
+; en los mensajes de error. Paso por valor: el vector del eslabon es nuevo, asi
+; que asignar un parametro no cambia la variable de quien invoca.
+(define aplicar-procedimiento
+  (lambda (proc argumentos nombre)
+    (cases procedimiento proc
+      (clausura (tipos parametros cuerpo amb)
+        (if (not (= (length parametros) (length argumentos)))
+            (eopl:error 'aplicar-procedimiento
+                        "El procedimiento ~a espera ~a argumento(s) y recibio ~a"
+                        nombre (length parametros) (length argumentos))
+            (begin
+              (validar-argumentos tipos parametros argumentos nombre)
+              (evaluar-expresion cuerpo
+                                 (ambiente-extendido
+                                  (list->vector tipos)
+                                  parametros
+                                  (list->vector argumentos)
+                                  (make-vector (length parametros) #f)
+                                  amb))))))))
+
+; validar-argumentos:
+; Proposito:
+; L(T) x L(Sym) x L(V) x Sym -> B : Recorre en paralelo los tipos, los nombres
+; de los parametros y los argumentos. Si algun argumento no coincide con el tipo
+; de su parametro lanza un error; si todos coinciden retorna #t.
+(define validar-argumentos
+  (lambda (tipos parametros argumentos nombre)
+    (cond
+      ((null? tipos) #t)
+      ((validar-tipo (car tipos) (car argumentos))
+       (validar-argumentos (cdr tipos) (cdr parametros) (cdr argumentos) nombre))
+      (else
+       (eopl:error 'aplicar-procedimiento
+                   "El parametro ~a del procedimiento ~a es de tipo ~s y recibio ~a"
+                   (car parametros) nombre (car tipos) (mostrar-valor (car argumentos)))))))
 
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
@@ -1009,6 +1252,45 @@
       (else (evaluar-switch valor (cdr casos) (cdr cuerpos) cuerpo-default amb)))))
 
 ;; ============================================================================
+;; NOTA: desde que existe main, el valor de un programa es lo que retorna main.
+;; Los ejemplos de abajo que no definen main muestran el parseo de cada
+;; produccion; el valor anotado es el de la expresion de la ultima definicion.
+;;
+;; NOTA sobre las comillas: dentro de (scan&parse "...") el programa es un
+;; string de Racket, por eso las cadenas de LogicFusion se escriben \"hola\".
+;; Para probar un ejemplo en el REPL (-->) se copia sin el \ :  sq("hola")
+;; Si se pega con \" el parser falla (... can't begin with end-marker #f).
+;; ============================================================================
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA PROCEDIMIENTOS, INVOCACION Y main
+;; ============================================================================
+;; operando-lambda + main:
+;; (scan&parse "GLOBALS { int a = 4; proc square = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return square(a); }; }") ; 16
+;; Varios parametros:
+;; (scan&parse "GLOBALS { proc suma = lambda (int x, float y) { return x + y; }; } PROGRAM { proc main = lambda () { return suma(1, 2.5); }; }") ; 3.5
+;; Invocacion dentro de una operacion:
+;; (scan&parse "GLOBALS { proc square = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return square(2) + square(3); }; }") ; 13
+;; Recursion:
+;; (scan&parse "GLOBALS { proc factorial = lambda (int n) { return if (n <= 1) { 1 } else { n * factorial(n ~ 1) }; }; } PROGRAM { proc main = lambda () { return factorial(5); }; }") ; 120
+;; Recursion mutua (esPar llama a esImpar, definido despues, y viceversa):
+;; (scan&parse "GLOBALS { proc esPar = lambda (int n) { return if (n == 0) { True } else { esImpar(n ~ 1) }; }; proc esImpar = lambda (int n) { return if (n == 0) { False } else { esPar(n ~ 1) }; }; } PROGRAM { proc main = lambda () { return esPar(4); }; }") ; True
+;; Procedimiento que retorna un procedimiento (la clausura conserva n = 5):
+;; (scan&parse "GLOBALS { proc sumador = lambda (int n) { return lambda (int x) { return x + n; }; }; proc mas5 = sumador(5); } PROGRAM { proc main = lambda () { return mas5(10); }; }") ; 15
+;; Orden superior (parametro de tipo proc):
+;; (scan&parse "GLOBALS { proc doble = lambda (int x) { return x * 2; }; proc aplicar = lambda (proc g, int x) { return g(x); }; } PROGRAM { proc main = lambda () { return aplicar(doble, 7); }; }") ; 14
+;; LOCALS dentro de un procedimiento (triangle de la guia):
+;; (scan&parse "GLOBALS { float base = 10.5; proc triangle = lambda (float base, float height) { return LOCALS { float area = 0; } { set area -> base * height / 2; area; }; }; } PROGRAM { proc main = lambda () { return triangle(base, 6.4); }; }") ; 33.6
+;; Paso por valor (x global sigue en 5):
+;; (scan&parse "GLOBALS { int x = 5; proc cambiar = lambda (int x) { return BLOCK { set x -> 99; x; }; }; } PROGRAM { proc main = lambda () { return BLOCK { cambiar(x); x; }; }; }") ; 5
+;; Errores:
+;; (scan&parse "GLOBALS { } PROGRAM { }")                                                   ; error: no hay main
+;; (scan&parse "GLOBALS { int f = 2; } PROGRAM { proc main = lambda () { return f(2, 1); }; }") ; error: f no es un procedimiento
+;; (scan&parse "GLOBALS { proc sq = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return sq(1, 2); }; }") ; error: cantidad de argumentos
+;; (scan&parse "GLOBALS { proc sq = lambda (int x) { return x * x; }; } PROGRAM { proc main = lambda () { return sq(\"hola\"); }; }") ; error: tipo del argumento
+;; (scan&parse "GLOBALS { proc p = 5; } PROGRAM { }")                                       ; error: tipo proc
+
+;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE PRIMITIVAS
 ;; (se dejan comentados para que no se ejecuten al cargar el archivo)
 ;; ============================================================================
@@ -1088,13 +1370,6 @@
 ;; (scan&parse "GLOBALS { int n = 2; } PROGRAM { int r = switch (n) { case 1: { 10 } case 1 + 1: { 20 } default: { 0 } }; }") ; 20
 ;; (scan&parse "GLOBALS { int n = 5; } PROGRAM { int r = 1 + switch (n) { default: { 7 } }; }") ; 8
 ;; ============================================================================
-;; EJEMPLOS DE scan&parse PARA if/else
-;; ============================================================================
-;; (scan&parse "GLOBALS { int edad = 20; } PROGRAM { string r = if (edad >= 18) { \"Mayor de edad\" } else { \"Menor de edad\" }; }") ; "Mayor de edad"
-;; (scan&parse "GLOBALS { int edad = 15; } PROGRAM { string r = if (edad < 13) { \"Nino\" } else { if (edad < 18) { \"Adolescente\" } else { \"Adulto\" } }; }") ; "Adolescente" (anidado)
-;; (scan&parse "GLOBALS { } PROGRAM { int r = if (0) { 1 } else { 2 }; }") ; 2 (0 es falso)
-;; (scan&parse "GLOBALS { } PROGRAM { int r = 10 + if (True) { 1 } else { 2 } * 3; }") ; 13 (if como operando)
-;; ============================================================================
 ;Esta funcion debe conocer a todo lo demas del interpretador, por eso va al final.
 (define logicfusion-interpretador
   (sllgen:make-rep-loop  "-->" evaluar-programa
@@ -1102,4 +1377,4 @@
                           scanner-spec-logicfusion
                           gramatica-logicfusion)))
 
- (logicfusion-interpretador)
+(logicfusion-interpretador)
