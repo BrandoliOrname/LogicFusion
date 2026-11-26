@@ -1,3 +1,10 @@
+# README.md — LogicFusion (estructura ajustada)
+
+A continuación te dejo el `README.md` reorganizado y consolidado, alineado con el código real del intérprete (`#lang eopl`) y con la guía que ya tenías. Se corrigieron incoherencias (p. ej. el carácter de comentario es `$`, no `%`), se añadieron las producciones que el código soporta y que el README omitía (`switch`, `%`, `es-multiplicacion-division?`, etc.), y se conservó la numeración de secciones y el estilo de tablas.
+
+---
+
+```markdown
 # LogicFusion — Intérprete
 
 ## Tabla de contenidos
@@ -16,8 +23,9 @@
 12. Ambientes y referencias
 13. Definiciones formales de procedimientos
 14. Ejemplos de uso
+15. Pendientes
 
-## Descripción general
+## 1. Descripción general
 
 **LogicFusion** es un lenguaje de programación imperativo con tipado estático, implementado como un intérprete en Racket usando la biblioteca `eopl` (Essentials of Programming Languages). El intérprete procesa un programa completo, evalúa sus definiciones en orden y retorna el valor de la última definición del bloque `PROGRAM`.
 
@@ -27,14 +35,12 @@ El intérprete está construido sobre tres pilares:
 - **Especificación sintáctica** (`gramatica-logicfusion`): define la gramática del lenguaje con SLLGEN.
 - **Evaluador**: recorre el árbol de sintaxis abstracta (ASA) producido por SLLGEN y computa valores.
 
-## Requisitos
+## 2. Requisitos
 
 - [Racket](https://racket-lang.org/) con el paquete `eopl` instalado.
 - El archivo fuente debe comenzar con `#lang eopl`.
 
----
-
-## Cómo ejecutar
+## 3. Cómo ejecutar
 
 Al cargar el archivo en DrRacket o ejecutarlo desde la terminal, el intérprete entra en un **REPL interactivo** indicado por el prompt `-->`. Se pueden ingresar programas completos directamente:
 
@@ -55,14 +61,14 @@ Y `just-scan` para ver únicamente los tokens generados por el scanner:
 (just-scan "GLOBALS { int a = 5; }")
 ```
 
-## Especificación léxica
+## 4. Especificación léxica
 
 Definida en `scanner-spec-logicfusion`. Cada regla tiene la forma `(nombre (expresión-regular) acción)`.
 
 | Token              | Expresión regular                                        | Acción            |
 | ------------------ | -------------------------------------------------------- | ----------------- |
 | `espacio-blanco`   | `whitespace`                                             | `skip` — ignorado |
-| `comentario`       | `%` seguido de cualquier carácter hasta fin de línea     | `skip` — ignorado |
+| `comentario`       | `$` seguido de cualquier carácter hasta fin de línea     | `skip` — ignorado |
 | `decimal-positivo` | Dígitos, punto, dígitos                                  | `number`          |
 | `decimal-negativo` | `-` seguido de dígitos, punto, dígitos                   | `number`          |
 | `entero-positivo`  | Uno o más dígitos                                        | `number`          |
@@ -73,10 +79,10 @@ Definida en `scanner-spec-logicfusion`. Cada regla tiene la forma `(nombre (expr
 **Notas importantes:**
 
 - Los identificadores permiten guiones medios en el interior siempre que vayan seguidos de letra o dígito (ej. `mi-variable`, `es-par?`). Un guion al inicio sería reconocido como número negativo.
-- El carácter `%` inicia un comentario de línea; todo lo que sigue hasta el salto de línea es ignorado.
+- El carácter `$` inicia un comentario de línea; todo lo que sigue hasta el salto de línea es ignorado.
 - El scanner conserva las comillas en el lexema del token `texto`. La función auxiliar `quitar-comillas` las elimina en tiempo de evaluación.
 
-## Gramática BNF
+## 5. Gramática BNF
 
 ```bnf
 programa     ::= "GLOBALS" "{" { definicion } "}"
@@ -119,14 +125,15 @@ resto-parentesis     ::= <vacío> | "," { expresion "," }
 
 dato-primitivo ::= entero | decimal | texto | "True" | "False" | identificador
 
-primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
+primitiva-binaria ::= "+" | "~" | "/" | "*" | "%" | "concat"
                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
 
 primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
 ```
 
-### Semántica de los paréntesis
+> Nota: el código declara además `switch` como operando (ver §11) y `%` como primitiva binaria (ver §9).
 
+### Semántica de los paréntesis
 
 | Sintaxis        | Significado                          |
 | --------------- | ------------------------------------ |
@@ -139,14 +146,16 @@ primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
 
 De mayor a menor prioridad (todos con asociatividad a izquierda):
 
-1. `*` `/`
+1. `*` `/` `%`
 2. `+` `~`
 3. `concat`
 4. `>` `<` `>=` `<=` `!=` `==`
 
 **Importante:** las comparaciones no se encadenan. `1 < 2 < 3` se evalúa como `(1 < 2) < 3`, es decir `True < 3`, lo que produce un error de tipos. `set` tiene la precedencia más baja; para usarlo dentro de una operación aritmética debe ir entre paréntesis: `1 + (set x -> 5)`.
 
-## Sistema de tipos
+`if` es un operando, por lo que puede usarse dentro de operaciones: `10 + if (True) { 1 } else { 2 } * 3` → `13`.
+
+## 6. Sistema de tipos
 
 ### Tipos primitivos
 
@@ -170,29 +179,33 @@ De mayor a menor prioridad (todos con asociatividad a izquierda):
 
 La validación de tipos compuestos verifica solo la estructura (si es lista o vector), no el tipo interno de los elementos. Las constantes declaradas con `const` no pueden ser reasignadas; intentar hacerlo con `set` produce un error en tiempo de ejecución.
 
----
+**Coerción (`coercionar-tipo`):**
 
-## Estructura de un programa
+- `float` ← cualquier número: `exact->inexact` (convierte `int` a `float`).
+- `int` ← decimal: `inexact->exact` + `truncate` (trunca la parte decimal).
+- `string`, `bool`, `void`, listas y vectores: sin cambio.
+
+## 7. Estructura de un programa
 
 Todo programa LogicFusion tiene exactamente dos bloques:
 
 ```
 GLOBALS {
-    % Definiciones accesibles en todo el programa
+    $ Definiciones accesibles en todo el programa
     int base = 10;
     const float pi = 3.14;
 }
 PROGRAM {
-    % Definiciones del bloque principal
+    $ Definiciones del bloque principal
     float area = pi * base * base;
 }
 ```
 
 - El bloque `GLOBALS` se evalúa primero y construye el ambiente global.
 - El bloque `PROGRAM` se evalúa en el ambiente extendido por `GLOBALS`.
-- El intérprete **retorna el valor de la última definición** del bloque `PROGRAM`.
+- El intérprete **retorna el valor de la última definición** del bloque `PROGRAM` (`obtener-ultimo-valor` sobre el ambiente final).
 
-## Expresiones y operandos
+## 8. Expresiones y operandos
 
 ### Definición de variable
 
@@ -277,36 +290,39 @@ int r = LOCALS {
 };
 ```
 
-## Primitivas
+## 9. Primitivas
 
 ### Primitivas binarias
 
-|   |   |   |   |
-|---|---|---|---|
-|Operador|Nombre|Tipos válidos|Resultado|
-|`+`|suma|`int`, `float`|`int` o `float`|
-|`~`|resta|`int`, `float`|`int` o `float`|
-|`*`|multiplicación|`int`, `float`|`int` o `float`|
-|`/`|división|`int`, `float`|`int` (entera) o `float`|
-|`concat`|concatenación|`string`|`string`|
-|`>` `<` `>=` `<=`|comparación de orden|`int`, `float`, `bool`|`bool`|
-|`==` `!=`|igualdad|`int`, `float`, `bool`|`bool`|
+| Operador          | Nombre               | Tipos válidos          | Resultado       |
+| ----------------- | -------------------- | ---------------------- | --------------- |
+| `+`               | suma                 | `int`, `float`         | `int` o `float` |
+| `~`               | resta                | `int`, `float`         | `int` o `float` |
+| `*`               | multiplicación       | `int`, `float`         | `int` o `float` |
+| `/`               | división             | `int`, `float`         | `int`o `float`  |
+| `%`               | módulo (resto)       | `int`                  | `int`           |
+| `concat`          | concatenación        | `string`               | `string`        |
+| `>` `<` `>=` `<=` | comparación de orden | `int`, `float`, `bool` | `bool`          |
+| `==` `!=`         | igualdad             | `int`, `float`, `bool` | `bool`          |
 
-`int / int` produce un entero (división entera con `quotient`). Si alguno de los operandos es `float`, el resultado es `float`. La división por cero produce un error. `False < True` porque `False` equivale a `0` y `True` a `1`.
+**División (`dividir`):** convierte ambos operandos a `inexact` y usa `/`, por lo que el resultado es siempre `float` (p. ej. `6 / 3` → `2.0`). Divisor `0` → error. Si se necesita división entera, el resultado puede pasarse a `int` por coerción.
+
+**Módulo (`modular`):** exige ambos operandos enteros exactos (`entero?`); divisor `0` → error. Usa `remainder`.
+
+**Comparaciones (`condicional?`):** dos números se comparan por valor (`1 == 1.0` es `#t`); dos booleanos se convierten a `0`/`1` (`False < True`); un bool contra un número lanza un error explicativo (encadenamiento de comparaciones); tipos de categorías distintas → error.
 
 ### Primitivas unarias
 
-| Operador      | Tipos válidos         | Resultado                    | Ejemplo                                  |
-| ------------- | --------------------- | ---------------------------- | ---------------------------------------- |
-| `longitud(e)` | `string`              | `int` — número de caracteres | `longitud("hola")` → `4`                 |
-| `add1(e)`     | `int`, `float`        | mismo tipo + 1               | `add1(7)` → `8`                          |
-| `sub1(e)`     | `int`, `float`        | mismo tipo − 1               | `sub1(3.0)` → `2.0`                      |
+| Operador      | Tipos válidos         | Resultado                    | Ejemplo                        |
+| ------------- | --------------------- | ---------------------------- | ------------------------------ |
+| `longitud(e)` | `string`              | `int` — número de caracteres | `longitud("hola")` → `4`       |
+| `add1(e)`     | `int`, `float`        | mismo tipo + 1               | `add1(7)` → `8`                |
+| `sub1(e)`     | `int`, `float`        | mismo tipo − 1               | `sub1(3.0)` → `2.0`            |
 | `neg(e)`      | `bool`, `int`/`float` | `bool` — negación lógica     | `neg(True)` → `False`, `neg(0)` → `True` |
 
 `neg` sobre números sigue la convención del lenguaje: `0` es falso (`neg(0)` es `True`), cualquier otro número es verdadero (`neg(5)` es `False`).
 
----
-## Operaciones sobre listas
+## 10. Operaciones sobre listas
 
 Las listas son **listas enlazadas** construidas recursivamente con `make-list` y `empty`.
 
@@ -336,12 +352,12 @@ PROGRAM {
 Lista por sintaxis de paréntesis:
 
 ```
-list<int> x    = (1, 2, 3,);
-list<int> uno  = (42,);
+list<int> x     = (1, 2, 3,);
+list<int> uno   = (42,);
 list<int> vacia = ();
 ```
 
-## Estructuras de control
+## 11. Estructuras de control
 
 ### Condicional `if / else`
 
@@ -372,7 +388,7 @@ Como operando en una expresión aritmética:
 
 ```
 int r = 10 + if (True) { 1 } else { 2 } * 3;
-% Resultado: 10 + (1 * 3) = 13
+$ Resultado: 10 + (1 * 3) = 13
 ```
 
 ### `switch`
@@ -398,15 +414,15 @@ PROGRAM {
 }
 ```
 
-Los valores de los `case` son expresiones arbitrarias evaluadas en orden. La comparación usa igualdad por valor (`=` entre números, `string=?` entre cadenas, `eq?` entre booleanos).
+Los valores de los `case` son expresiones arbitrarias evaluadas en orden. La comparación usa `valores-iguales?`: `=` entre números, `string=?` entre cadenas, `eq?` entre booleanos.
 
-## Ambientes y referencias
+## 12. Ambientes y referencias
 
 El intérprete implementa un modelo de **paso por valor con mutación explícita** mediante referencias.
 
 ### Estructura del ambiente
 
-Cada marco (frame) del ambiente almacena cuatro vectores paralelos:
+Cada marco (frame) del ambiente (`ambiente-extendido`) almacena cuatro vectores paralelos más el ambiente anterior:
 
 | Campo      | Tipo     | Contenido                          |
 | ---------- | -------- | ---------------------------------- |
@@ -414,6 +430,7 @@ Cada marco (frame) del ambiente almacena cuatro vectores paralelos:
 | `simbolos` | `list`   | Nombre de cada variable            |
 | `valores`  | `vector` | Referencia mutable al valor actual |
 | `es-const` | `vector` | `#t` si la variable es constante   |
+| `amb`      | `Amb`    | Ambiente anterior (cadena)         |
 
 Los marcos se encadenan: cada `ambiente-extendido` apunta al anterior, formando una cadena que termina en `ambiente-vacio`.
 
@@ -429,9 +446,16 @@ La mutación se implementa con el tipo `referencia`:
 
 Una referencia guarda la **posición** dentro del vector de valores y el **vector** mismo. Leer una referencia se hace con `deref`; mutarla con `setref!`.
 
-## Definiciones formales de procedimientos
+### Búsqueda y asignación
 
-Notación: `Dominio -> Codominio`. Abreviaturas usadas: `V` = valor arbitrario, `N` = número, `B` = booleano, `S` = cadena, `L(X)` = lista de X, `E` = expresión (nodo del ASA), `Amb` = ambiente, `PB` = primitiva binaria, `PU` = primitiva unaria, `Pred` = predicado `V -> B`, `Sym` = símbolo, `Proc` = procedimiento Racket, `Ref` = referencia.
+- `aplicar-ambiente` → valor actual (usa `deref`).
+- `aplicar-ambiente-referencia` → la referencia (permite leer y mutar).
+- `buscar-ligadura-para-modificar` → `(referencia, tipo, es-const)`; lo usa `aplicar-asignacion`.
+- `aplicar-asignacion` valida que no sea constante y que el nuevo valor respete el tipo antes de `setref!`.
+
+## 13. Definiciones formales de procedimientos
+
+Notación: `Dominio -> Codominio`. Abreviaturas: `V` = valor arbitrario, `N` = número, `B` = booleano, `S` = cadena, `L(X)` = lista de X, `E` = expresión (nodo del ASA), `Amb` = ambiente, `PB` = primitiva binaria, `PU` = primitiva unaria, `Pred` = predicado `V -> B`, `Sym` = símbolo, `Proc` = procedimiento Racket, `Ref` = referencia.
 
 ### `evaluar-programa`
 
@@ -455,13 +479,19 @@ Procesa una lista de definiciones en orden, extendiendo el ambiente con cada una
 
 **Propósito:** `Def × Amb -> Amb`
 
-Evalúa una definición (variable o constante): (1) evalúa la expresión inicial, (2) valida el tipo con `validar-tipo`, (3) crea un nuevo marco `ambiente-extendido` con el valor en un vector mutable. Para constantes, `es-const` se guarda como `#t`. Si la validación falla, lanza un error descriptivo.
+Evalúa una definición (variable o constante): (1) evalúa la expresión inicial, (2) aplica `coercionar-tipo` según el tipo declarado, (3) valida con `validar-tipo`, (4) crea un nuevo marco `ambiente-extendido` con el valor en un vector mutable. Para constantes, `es-const` se guarda como `#t`. Si la validación falla, lanza un error descriptivo.
 
 ### `validar-tipo`
 
 **Propósito:** `Tipo × V -> B`
 
-Verifica que un valor corresponda al tipo declarado. Para tipos primitivos usa los predicados de Racket (`integer?`, `real?`, `string?`, `boolean?`); `void` siempre es válido. Para tipos compuestos verifica la estructura (`list?`, `vector?`).
+Verifica que un valor corresponda al tipo declarado. Para tipos primitivos usa los predicados de Racket (`entero?`, `real?`, `string?`, `boolean?`); `void` siempre es válido. Para tipos compuestos verifica la estructura (`list?`, `vector?`).
+
+### `coercionar-tipo`
+
+**Propósito:** `Tipo × V -> V`
+
+Ajusta el valor al tipo declarado antes de validarlo: `float` ← `exact->inexact`; `int` ← `inexact->exact` + `truncate`; `string`, `bool`, `void`, listas y vectores sin cambio.
 
 ### `evaluar-expresion`
 
@@ -510,7 +540,7 @@ Evalúa en orden una secuencia de expresiones y retorna el valor de la última. 
 
 **Propósito:** `L(V) × L(PB) -> V`
 
-Aplica la precedencia de operadores a una lista plana de valores y operadores alternados. Usa cuatro pasadas con `reducir-nivel`: (1) `*`/`/`, (2) `+`/`~`, (3) `concat`, (4) comparaciones. Si al final queda más de un valor sin operador, lanza un error.
+Aplica la precedencia de operadores a una lista plana de valores y operadores alternados. Usa cuatro pasadas con `reducir-nivel`: (1) `*`/`/`/`%`, (2) `+`/`~`, (3) `concat`, (4) comparaciones. Si al final queda más de un valor sin operador, lanza un error.
 
 ### `reducir-nivel`
 
@@ -518,11 +548,17 @@ Aplica la precedencia de operadores a una lista plana de valores y operadores al
 
 Recorre de izquierda a derecha la lista de valores y operadores. Cuando el operador cumple el predicado, lo aplica inmediatamente y acumula el resultado. Cuando no lo cumple, conserva el operador y el valor para la siguiente pasada. Retorna `(nuevos-valores nuevos-operadores)`.
 
+### `es-multiplicacion-division?` / `es-suma-resta?` / `es-concat?` / `es-comparacion?`
+
+**Propósito:** `PB -> B`
+
+Predicados de nivel de precedencia usados por `evaluar-secuencia`. `es-multiplicacion-division?` incluye `%`.
+
 ### `evaluar-primitiva-binaria`
 
 **Propósito:** `PB × V × V -> V`
 
-Despacha sobre la primitiva: aritméticas (`+`, `~`, `*`) delegan en `operar-numeros`; división (`/`) en `dividir`; `concat` en `concatenar`; comparaciones en `condicional?`.
+Despacha sobre la primitiva: aritméticas (`+`, `~`, `*`) delegan en `operar-numeros`; división (`/`) en `dividir`; módulo (`%`) en `modular`; `concat` en `concatenar`; comparaciones en `condicional?`.
 
 ### `evaluar-primitiva-unaria`
 
@@ -546,7 +582,13 @@ Versión unaria de `operar-numeros`. Usada por `add1` y `sub1`.
 
 **Propósito:** `V × V -> N`
 
-Divide dos números. `int / int` → `quotient` (división entera). `float` involucrado → división decimal. Divisor `0` → error. Se usa `quotient` en lugar de `/` de Racket porque `(/ 7 2)` produce la fracción `7/2`, que rompe la validación de tipos.
+Convierte ambos operandos a `inexact` y usa `/`. Divisor `0` → error. Se evita `/` directo sobre exactos porque `(/ 7 2)` produce la fracción `7/2`, que rompe la validación de tipos.
+
+### `modular`
+
+**Propósito:** `V × V -> N`
+
+Exige dos enteros exactos y usa `remainder`. Divisor `0` → error.
 
 ### `entero?`
 
@@ -626,6 +668,8 @@ Busca el símbolo y retorna una lista con: (1) la referencia, (2) el tipo declar
 
 Implementa `set id -> expr`: (1) obtiene referencia, tipo y bandera de constante; (2) si es constante → error; (3) si el tipo no coincide → error; (4) muta la referencia con `setref!` y retorna el nuevo valor.
 
+> Nota: `aplicar-asignacion` valida el tipo con `validar-tipo` directamente (no aplica coerción); asignar `5.0` a un `int` falla aunque la definición inicial sí coerción.
+
 ### `deref` / `primitiva-deref`
 
 **Propósito:** `Ref -> V`
@@ -672,109 +716,4 @@ Busca un símbolo en una lista y retorna su posición. Delega en `list-index` co
 
 **Propósito:** `Sym × L(Sym) -> N | #f`
 
-Alias semántico de `list-find-position` para buscar la posición dentro del marco (_rib_) de un ambiente extendido. La posición indexa simultáneamente los vectores de valores, tipos y `es-const`.
-
-## Ejemplos de uso
-
-### Operaciones aritméticas
-
-```
-GLOBALS {
-    int a = 10;
-    int b = 3;
-}
-PROGRAM {
-    int suma     = a + b;      % 13
-    int resta    = a ~ b;      % 7
-    int mult     = a * b;      % 30
-    int cociente = a / b;      % 3  (division entera)
-    bool mayor   = a > b;      % True
-}
-```
-
-### Cadenas
-
-```
-GLOBALS { }
-PROGRAM {
-    string nombre = "Logic" concat "Fusion";
-    int largo     = longitud(nombre);
-}
-```
-
-### Listas
-
-```
-GLOBALS { }
-PROGRAM {
-    list<int> nums  = make-list(1, make-list(2, make-list(3, empty)));
-    int primero     = head(nums);
-    list<int> resto = tail(nums);
-    int n           = length(nums);
-    int segundo     = ref-list(nums, 1);
-}
-```
-
-### Condicional
-
-```
-GLOBALS { int edad = 17; }
-PROGRAM {
-    string cat = if (edad >= 18) {
-        "Mayor de edad"
-    } else {
-        "Menor de edad"
-    };
-}
-```
-
-### Switch
-
-```
-GLOBALS { int dia = 1; }
-PROGRAM {
-    string nombre-dia = switch (dia) {
-        case 1: { "Lunes" }
-        case 2: { "Martes" }
-        case 3: { "Miercoles" }
-        default: { "Otro dia" }
-    };
-}
-```
-
-### Mutación con BLOCK
-
-```
-GLOBALS { int contador = 0; }
-PROGRAM {
-    int final = BLOCK {
-        set contador -> contador + 1;
-        set contador -> contador + 1;
-        set contador -> contador + 1;
-        contador;
-    };
-}
-% final = 3
-```
-
-### Variables locales con LOCALS
-
-```
-GLOBALS { int base = 5; }
-PROGRAM {
-    int resultado = LOCALS {
-        int altura = 3;
-        int area   = base * altura;
-    } {
-        area + 1;
-    };
-}
-% resultado = 16
-```
-
-#### Pendintes
-1. `sat`, `proc` y `dict` declarados pero sin evaluar.
-2. Validación de tipo interno de listas/vectores incompleta.
-3. `evaluar-definicion` señala que la validación de tipos compuestos y la asignación estaban por completar.
-4. Soporte para `proc` y función `main` aún pendiente.
-5. Paso por referencia no implementado.
+Alias semántico de `list-find-position` para buscar la posición dentro del marco (_rib_) de un ambiente extendido. La posición indexa simultáneamente los vectores

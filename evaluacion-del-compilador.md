@@ -157,7 +157,7 @@ PROGRAM {
 aplicar-asignacion: No se puede cambiar la constante salario
 ```
 
-# ==🟡Pregunta No. 5==
+# ==🟢Pregunta No. 5==
 
 Muestre mediante un solo ejemplo que su **interpretador** tiene la capacidad de procesar las siguientes Primitivas aritméticas:  +, −, ∗, %, /, para:
 
@@ -183,6 +183,7 @@ GLOBALS {
 	int restar = a ~ b;
 	int multiplicar = a * b;
 	int dividir = a / b;
+	int modulo = a % b;
 }
 PROGRAM {
 	proc main = lambda () {
@@ -193,12 +194,13 @@ PROGRAM {
 
 % Flotantes
 GLOBALS {
-	float a = 2.5;
-	float b = 0.5;
+	float a = 10.5;
+	float b = 3.0;
 	float sumar = a + b;
 	float restar = a ~ b;
 	float multiplicar = a * b;
 	float dividir = a / b;
+	float modulo = a % b;
 }
 PROGRAM {
 	proc main = lambda () {

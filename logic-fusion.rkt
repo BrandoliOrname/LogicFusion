@@ -88,7 +88,7 @@
 
 (define scanner-spec-logicfusion
   '((espacio-blanco (whitespace) skip)
-    (comentario ("%" (arbno (not #\newline))) skip)
+    (comentario ("$" (arbno (not #\newline))) skip)
     (decimal-positivo (digit (arbno digit) "." digit (arbno digit)) number)
     (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (entero-positivo (digit (arbno digit)) number)
@@ -223,6 +223,7 @@
     (primitiva-binaria ("~") resta)
     (primitiva-binaria ("/") division)
     (primitiva-binaria ("*") multiplicacion)
+    (primitiva-binaria ("%") modulo)
     (primitiva-binaria ("concat") concat)
     (primitiva-binaria (">") mayor)
     (primitiva-binaria ("<") menor)
@@ -383,6 +384,18 @@
   (lambda (def ambiente)
     (cases definicion def
       (variable-definicion (tipo identificador expresion)
+  (let* ((valor-sin-procesar (evaluar-expresion expresion ambiente))
+         (valor-inicial (coercionar-tipo tipo valor-sin-procesar)))  ; <-- nuevo
+    (if (validar-tipo tipo valor-inicial)
+        (ambiente-extendido
+         (vector tipo)
+         (list identificador)
+         (vector valor-inicial)
+         (vector #f)
+         ambiente)
+        (eopl:error 'evaluar-definicion
+                    "La variable ~s es de tipo ~s y recibio ~s"
+                    identificador tipo valor-inicial))))
                            (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
                              ;si la validacion es correcta, extiende el ambiente
                              (if (validar-tipo tipo valor-inicial)
@@ -625,6 +638,7 @@
       (resta ()          (operar-numeros '~ - valor1 valor2))
       (multiplicacion () (operar-numeros '* * valor1 valor2))
       (division ()       (dividir valor1 valor2))
+      (modulo ()         (modular valor1 valor2))
       (concat ()         (concatenar valor1 valor2))
       (mayor ()          (condicional? '>  valor1 valor2))
       (menor ()          (condicional? '<  valor1 valor2))
@@ -700,8 +714,25 @@
                    valor1 valor2))
       ((zero? valor2)
        (eopl:error 'evaluar-primitiva-binaria "Division por cero: ~s / ~s" valor1 valor2))
-      ((and (entero? valor1) (entero? valor2)) (quotient valor1 valor2))
-      (else (/ valor1 valor2)))))
+      (else
+       (/ (exact->inexact valor1)
+          (exact->inexact valor2))))))
+
+(define modular
+  (lambda (valor1 valor2)
+    (cond
+      ((not (and (number? valor1) (number? valor2)))
+       (eopl:error 'evaluar-primitiva-binaria
+                   "La primitiva mod solo opera sobre int y float, se recibio: ~s y ~s"
+                   valor1 valor2))
+      ((zero? valor2)
+       (eopl:error 'evaluar-primitiva-binaria
+                   "Modulo por cero: ~s mod ~s" valor1 valor2))
+      ((and (integer? valor1) (integer? valor2)) remainder valor1 valor2)
+      (else (modulo-decimal valor1 valor2)))))
+
+(define (modulo-decimal a b)
+  (- a (* b (floor (/ a b)))))
 
 ; entero?:
 ; Proposito:
@@ -722,6 +753,22 @@
         (eopl:error 'evaluar-primitiva-binaria
                     "La primitiva concat solo opera sobre string, se recibio: ~s y ~s"
                     valor1 valor2))))
+
+(define coercionar-tipo
+  (lambda (tipo-dato valor)
+    (cases tipo tipo-dato
+      (tipo-simple (tp)
+        (cases tipo-primitivo tp
+          (decimal-tipo ()
+            (if (number? valor)
+                (exact->inexact valor)   ; int -> float automaticamente
+                valor))
+          (entero-tipo ()
+            (if (and (real? valor) (not (entero? valor)))
+                (inexact->exact (truncate valor))  ; float -> int (trunca)
+                valor))
+          (else valor)))                 ; string, bool, void: sin cambio
+      (tipo-complejo (tc) valor))))      ; listas, vectores: sin cambio
 
 ; longitud-de-cadena:
 ; Proposito:
@@ -838,6 +885,7 @@
     (cases primitiva-binaria op
       (multiplicacion () #t)
       (division () #t)
+      (modulo () #t)
       (else #f))))
 
 ; es-suma-resta?:
