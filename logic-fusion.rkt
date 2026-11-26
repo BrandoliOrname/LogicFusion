@@ -1197,6 +1197,11 @@
 ;; NOTA: desde que existe main, el valor de un programa es lo que retorna main.
 ;; Los ejemplos de abajo que no definen main muestran el parseo de cada
 ;; produccion; el valor anotado es el de la expresion de la ultima definicion.
+;;
+;; NOTA sobre las comillas: dentro de (scan&parse "...") el programa es un
+;; string de Racket, por eso las cadenas de LogicFusion se escriben \"hola\".
+;; Para probar un ejemplo en el REPL (-->) se copia sin el \ :  sq("hola")
+;; Si se pega con \" el parser falla (... can't begin with end-marker #f).
 ;; ============================================================================
 
 ;; ============================================================================
@@ -1303,4 +1308,4 @@
                           scanner-spec-logicfusion
                           gramatica-logicfusion)))
 
- (logicfusion-interpretador)
+(logicfusion-interpretador)
