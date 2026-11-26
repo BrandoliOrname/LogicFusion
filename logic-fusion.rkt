@@ -231,6 +231,9 @@
     (primitiva-binaria ("<=") menor-igual)
     (primitiva-binaria ("!=") diferente)
     (primitiva-binaria ("==") igual)
+    (primitiva-binaria ("or") disyuncion)
+    (primitiva-binaria ("and") conjuncion)
+    
 
     ;; Primitivas unarias
     (primitiva-unaria ("longitud") longitud)
@@ -635,7 +638,10 @@
       (mayor-igual ()    (condicional? '>= valor1 valor2))
       (menor-igual ()    (condicional? '<= valor1 valor2))
       (diferente ()      (condicional? '!= valor1 valor2))
-      (igual ()          (condicional? '== valor1 valor2)))))
+      (igual ()          (condicional? '== valor1 valor2))
+      (disyuncion ()     (or valor1 valor2))
+      (conjuncion ()     (and valor1 valor2))
+      )))
 
 ; evaluar-primitiva-unaria:
 ; Proposito:

@@ -242,10 +242,22 @@ PROGRAM {
 (#f #f #t #t #t #t)
 
 % Booleanos
-GLOBALS {}
-PROGRAM {
-	proc main = lambda () { return ...; };
+GLOBALS {
+	int a = 10;
+	int b = 80;
+	int mayor0 = if (a > 0) {10} else {20};
+	string intervalo = if (a > 0) {
+	    if (b < 90) { "cumple" } else { "no cumple" }
+			} else { "no cumple" };
+	bool estudiante = neg(True);
+	list<void> resultado = (mayor0, intervalo, estudiante);
 }
+PROGRAM {
+	proc main = lambda () { 
+		return resultado;
+	};
+}
+(10 "cumple" #f)
 ```
 
 # ==🟢Pregunta No. 7==
