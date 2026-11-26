@@ -113,7 +113,7 @@ PROGRAM {
 aplicar-asignacion: No se puede cambiar el valor de la constante salario
 ```
 
-# ==🟡Pregunta No. 5==
+# ==🟢Pregunta No. 5==
 
 Muestre mediante un solo ejemplo que su **interpretador** tiene la capacidad de procesar las siguientes Primitivas aritméticas:  +, −, ∗, %, /, para:
 
@@ -139,21 +139,23 @@ GLOBALS {
 	int restar = a ~ b;
 	int multiplicar = a * b;
 	int dividir = a / b;
+	int modulo = a % b;
 }
-PROGRAM {list<void> resultado = (sumar, restar, multiplicar, dividir);}
-(30 -10 200 0)
+PROGRAM {list<void> resultado = (sumar, restar, multiplicar, dividir, modulo);}
+(30 -10 200 0 10)
 
 % Flotantes
 GLOBALS {
-	float a = 2.5;
-	float b = 0.5;
+	float a = 10.5;
+	float b = 3.0;
 	float sumar = a + b;
 	float restar = a ~ b;
 	float multiplicar = a * b;
 	float dividir = a / b;
+	float modulo = a % b;
 }
-PROGRAM {list<void> resultado = (sumar, restar, multiplicar, dividir);}
-(3.0 2.0 1.25 5.0)
+PROGRAM {list<void> resultado = (sumar, restar, multiplicar, dividir, modulo);}
+(13.5 7.5 31.5 3.5 1.5)
 ```
 
 # ==🟡Pregunta No. 6==

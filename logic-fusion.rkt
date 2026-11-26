@@ -548,14 +548,18 @@
 (define modular
   (lambda (valor1 valor2)
     (cond
-      ((not (and (entero? valor1) (entero? valor2)))
+      ((not (and (number? valor1) (number? valor2)))
        (eopl:error 'evaluar-primitiva-binaria
-                   "La primitiva mod solo opera sobre int, se recibio: ~s y ~s"
+                   "La primitiva mod solo opera sobre int y float, se recibio: ~s y ~s"
                    valor1 valor2))
       ((zero? valor2)
        (eopl:error 'evaluar-primitiva-binaria
                    "Modulo por cero: ~s mod ~s" valor1 valor2))
-      (else (remainder valor1 valor2)))))
+      ((and (integer? valor1) (integer? valor2)) remainder valor1 valor2)
+      (else (modulo-decimal valor1 valor2)))))
+
+(define (modulo-decimal a b)
+  (- a (* b (floor (/ a b)))))
 
 ; entero?:
 ; Proposito:
