@@ -119,7 +119,7 @@ resto-parentesis     ::= <vacío> | "," { expresion "," }
 
 dato-primitivo ::= entero | decimal | texto | "True" | "False" | identificador
 
-primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
+primitiva-binaria ::= "+" | "~" | "/" | "*" | % |`"concat"
                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
 
 primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
@@ -139,7 +139,7 @@ primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
 
 De mayor a menor prioridad (todos con asociatividad a izquierda):
 
-1. `*` `/`
+1. `*` `/` `%`
 2. `+` `~`
 3. `concat`
 4. `>` `<` `>=` `<=` `!=` `==`
@@ -281,16 +281,16 @@ int r = LOCALS {
 
 ### Primitivas binarias
 
-|   |   |   |   |
-|---|---|---|---|
-|Operador|Nombre|Tipos válidos|Resultado|
-|`+`|suma|`int`, `float`|`int` o `float`|
-|`~`|resta|`int`, `float`|`int` o `float`|
-|`*`|multiplicación|`int`, `float`|`int` o `float`|
-|`/`|división|`int`, `float`|`int` (entera) o `float`|
-|`concat`|concatenación|`string`|`string`|
-|`>` `<` `>=` `<=`|comparación de orden|`int`, `float`, `bool`|`bool`|
-|`==` `!=`|igualdad|`int`, `float`, `bool`|`bool`|
+| Operador          | Nombre               | Tipos válidos          | Resultado                |
+| ----------------- | -------------------- | ---------------------- | ------------------------ |
+| `+`               | suma                 | `int`, `float`         | `int` o `float`          |
+| `~`               | resta                | `int`, `float`         | `int` o `float`          |
+| `*`               | multiplicación       | `int`, `float`         | `int` o `float`          |
+| `/`               | división             | `int`                  | `int` (entera) o `float` |
+| `%`               | modulo               | `int`                  | `int`                    |
+| `concat`          | concatenación        | `string`               | `string`                 |
+| `>` `<` `>=` `<=` | comparación de orden | `int`, `float`, `bool` | `bool`                   |
+| `==` `!=`         | igualdad             | `int`, `float`, `bool` | `bool`                   |
 
 `int / int` produce un entero (división entera con `quotient`). Si alguno de los operandos es `float`, el resultado es `float`. La división por cero produce un error. `False < True` porque `False` equivale a `0` y `True` a `1`.
 
@@ -688,6 +688,7 @@ PROGRAM {
     int resta    = a ~ b;      % 7
     int mult     = a * b;      % 30
     int cociente = a / b;      % 3  (division entera)
+    int modulo   = a % b;      % 1
     bool mayor   = a > b;      % True
 }
 ```

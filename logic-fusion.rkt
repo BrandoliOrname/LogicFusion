@@ -76,7 +76,7 @@
 
 (define scanner-spec-logicfusion
   '((espacio-blanco (whitespace) skip)
-    (comentario ("%" (arbno (not #\newline))) skip)
+    (comentario ("$" (arbno (not #\newline))) skip)
     (decimal-positivo (digit (arbno digit) "." digit (arbno digit)) number)
     (decimal-negativo ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (entero-positivo (digit (arbno digit)) number)
@@ -198,6 +198,7 @@
     (primitiva-binaria ("~") resta)
     (primitiva-binaria ("/") division)
     (primitiva-binaria ("*") multiplicacion)
+    (primitiva-binaria ("%") modulo)
     (primitiva-binaria ("concat") concat)
     (primitiva-binaria (">") mayor)
     (primitiva-binaria ("<") menor)
@@ -462,6 +463,7 @@
       (resta ()          (operar-numeros '~ - valor1 valor2))
       (multiplicacion () (operar-numeros '* * valor1 valor2))
       (division ()       (dividir valor1 valor2))
+      (modulo ()         (modular valor1 valor2))
       (concat ()         (concatenar valor1 valor2))
       (mayor ()          (condicional? '>  valor1 valor2))
       (menor ()          (condicional? '<  valor1 valor2))
@@ -539,6 +541,18 @@
        (eopl:error 'evaluar-primitiva-binaria "Division por cero: ~s / ~s" valor1 valor2))
       ((and (entero? valor1) (entero? valor2)) (quotient valor1 valor2))
       (else (/ valor1 valor2)))))
+
+(define modular
+  (lambda (valor1 valor2)
+    (cond
+      ((not (and (entero? valor1) (entero? valor2)))
+       (eopl:error 'evaluar-primitiva-binaria
+                   "La primitiva mod solo opera sobre int, se recibio: ~s y ~s"
+                   valor1 valor2))
+      ((zero? valor2)
+       (eopl:error 'evaluar-primitiva-binaria
+                   "Modulo por cero: ~s mod ~s" valor1 valor2))
+      (else (remainder valor1 valor2)))))
 
 ; entero?:
 ; Proposito:
@@ -674,6 +688,7 @@
     (cases primitiva-binaria op
       (multiplicacion () #t)
       (division () #t)
+      (modulo () #t)
       (else #f))))
 
 ; es-suma-resta?:
