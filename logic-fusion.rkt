@@ -384,24 +384,14 @@
   (lambda (def ambiente)
     (cases definicion def
       (variable-definicion (tipo identificador expresion)
-  (let* ((valor-sin-procesar (evaluar-expresion expresion ambiente))
-         (valor-inicial (coercionar-tipo tipo valor-sin-procesar)))  ; <-- nuevo
-    (if (validar-tipo tipo valor-inicial)
-        (ambiente-extendido
-         (vector tipo)
-         (list identificador)
-         (vector valor-inicial)
-         (vector #f)
-         ambiente)
-        (eopl:error 'evaluar-definicion
-                    "La variable ~s es de tipo ~s y recibio ~s"
-                    identificador tipo valor-inicial))))
-                           (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
-                             ;si la validacion es correcta, extiende el ambiente
-                             (if (validar-tipo tipo valor-inicial)
-                                 (extender-ambiente-definicion tipo identificador valor-inicial #f ambiente)
-
-                                (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
+        (let* ((valor-sin-procesar (evaluar-expresion expresion ambiente))
+               (valor-inicial (coercionar-tipo tipo valor-sin-procesar)))
+          (if (validar-tipo tipo valor-inicial)
+              (extender-ambiente-definicion tipo identificador valor-inicial #f ambiente)
+              (eopl:error 'evaluar-definicion
+                          "La variable ~s es de tipo ~s y recibio ~s"
+                          identificador tipo valor-inicial))))
+                           
 
       (constante-definicion (tipo identificador expresion)
                             (let ((valor-constante (evaluar-expresion expresion ambiente)))
