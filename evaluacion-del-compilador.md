@@ -210,7 +210,7 @@ PROGRAM {
 (3.0 2.0 1.25 5.0)
 ```
 
-# ==🟡Pregunta No. 6==
+# ==🟢Pregunta No. 6==
 Muestre mediante **un solo programa** que su **interpretador** tiene la capacidad de procesar las siguientes Primitivas booleanas:  (<, >, <=, >=, ='=, !=) para int, float y (and, or, not) para booleanos.
 
 Debe escribir un solo programa en su lenguaje de programación donde se evidencie la utilización de las 9 primitivas (aproximadamente 11.11% del total de los puntos por cada una).
@@ -242,10 +242,22 @@ PROGRAM {
 (#f #f #t #t #t #t)
 
 % Booleanos
-GLOBALS {}
-PROGRAM {
-	proc main = lambda () { return ...; };
+GLOBALS {
+	int a = 10;
+	int b = 80;
+	int mayor0 = if (a > 0) {10} else {20};
+	string intervalo = if (a > 0) {
+	    if (b < 90) { "cumple" } else { "no cumple" }
+			} else { "no cumple" };
+	bool estudiante = neg(True);
+	list<void> resultado = (mayor0, intervalo, estudiante);
 }
+PROGRAM {
+	proc main = lambda () { 
+		return resultado;
+	};
+}
+(10 "cumple" #f)
 ```
 
 # ==🟢Pregunta No. 7==
@@ -310,7 +322,7 @@ PROGRAM {
 }
 ```
 
-# ==🔴Pregunta No. 9==
+# ==🟢Pregunta No. 9==
 
 Demuestre que su **interpretador** es útil para programar. 
 
@@ -321,10 +333,22 @@ Elabore la función "map" en su lenguaje de programación. La función "map" rec
 ### Respuesta
 
 ``` logic-fusion
-GLOBALS {}
-PROGRAM {
-	proc main = lambda () { return ...; };
+GLOBALS {
+    proc map-int = lambda (proc predicado, list<int> lista) {
+        return if (empty?(lista)) {
+            empty
+        } else {
+            make-list(predicado(head(lista)), map-int(predicado, tail(lista)))
+        };
+    };
 }
+PROGRAM {
+    proc cuadrado = lambda (int x) { return x * x; };
+    proc main = lambda () {
+        return map-int(cuadrado, (1, 2, 3, 4));
+    };
+}
+(1 4 9 16)
 ```
 
 # ==🔴Pregunta No. 10==
