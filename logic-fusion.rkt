@@ -272,17 +272,18 @@
   (lambda (def ambiente)
     (cases definicion def
       (variable-definicion (tipo identificador expresion)
-                           (let ((valor-inicial (evaluar-expresion expresion ambiente) ))
-                             ;si la validacion es correcta, extiende el ambiente
-                             (if (validar-tipo tipo valor-inicial)
-                                 (ambiente-extendido
-                                  (vector tipo)
-                                  (list identificador)
-                                  (vector valor-inicial)
-                                  (vector #f)
-                                  ambiente)
-
-                                (eopl:error 'evaluar-definicion "La variable ~s es de tipo ~s y recibio ~s"  identificador tipo valor-inicial))))
+  (let* ((valor-sin-procesar (evaluar-expresion expresion ambiente))
+         (valor-inicial (coercionar-tipo tipo valor-sin-procesar)))  ; <-- nuevo
+    (if (validar-tipo tipo valor-inicial)
+        (ambiente-extendido
+         (vector tipo)
+         (list identificador)
+         (vector valor-inicial)
+         (vector #f)
+         ambiente)
+        (eopl:error 'evaluar-definicion
+                    "La variable ~s es de tipo ~s y recibio ~s"
+                    identificador tipo valor-inicial))))
 
       (constante-definicion (tipo identificador expresion)
                             (let ((valor-constante (evaluar-expresion expresion ambiente)))
@@ -419,6 +420,7 @@
                      
       )))
 
+
 ;; Evalúa en orden y conserva el valor de la última expresión del cuerpo.
 ;; evaluar-secuencia, más abajo, se ocupa de la precedencia de operadores.
 (define evaluar-cuerpo-secuencia
@@ -539,8 +541,9 @@
                    valor1 valor2))
       ((zero? valor2)
        (eopl:error 'evaluar-primitiva-binaria "Division por cero: ~s / ~s" valor1 valor2))
-      ((and (entero? valor1) (entero? valor2)) (quotient valor1 valor2))
-      (else (/ valor1 valor2)))))
+      (else
+       (/ (exact->inexact valor1)
+          (exact->inexact valor2))))))
 
 (define modular
   (lambda (valor1 valor2)
@@ -573,6 +576,22 @@
         (eopl:error 'evaluar-primitiva-binaria
                     "La primitiva concat solo opera sobre string, se recibio: ~s y ~s"
                     valor1 valor2))))
+
+(define coercionar-tipo
+  (lambda (tipo-dato valor)
+    (cases tipo tipo-dato
+      (tipo-simple (tp)
+        (cases tipo-primitivo tp
+          (decimal-tipo ()
+            (if (number? valor)
+                (exact->inexact valor)   ; int -> float automaticamente
+                valor))
+          (entero-tipo ()
+            (if (and (real? valor) (not (entero? valor)))
+                (inexact->exact (truncate valor))  ; float -> int (trunca)
+                valor))
+          (else valor)))                 ; string, bool, void: sin cambio
+      (tipo-complejo (tc) valor))))      ; listas, vectores: sin cambio
 
 ; longitud-de-cadena:
 ; Proposito:
