@@ -198,6 +198,8 @@
     (operando ("ref-dict" "(" expresion "," expresion ")") referencia-diccionario)
     (operando ("keys" "(" expresion ")") claves-diccionario)
     (operando ("values" "(" expresion ")") valores-diccionario)
+    ;; set-dict recibe el nombre de la variable para validar con su tipo dict<T,U>
+    (operando ("set-dict" "(" identificador "," expresion "," expresion ")") modificar-diccionario)
 
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
@@ -610,6 +612,10 @@
       ;; values: el vector convertido a lista nueva (asi no se modifica el diccionario)
       (valores-diccionario (exp)
         (vector->list (obtener-valores (exigir-diccionario 'values (evaluar-expresion exp amb)))))
+      (modificar-diccionario (id exp-clave exp-valor)
+        (let* ((clave (evaluar-expresion exp-clave amb))
+               (valor (evaluar-expresion exp-valor amb)))
+          (aplicar-set-dict id amb clave valor)))
       
 
       (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
@@ -1315,6 +1321,57 @@
                                      (append (vector->list (vector-ref caja 1))
                                              (list valor))))
                 dic)))))))
+
+; aplicar-set-dict:
+; Proposito:
+; Sym x Amb x V x V -> Dic : Busca la variable id (como set, con
+; buscar-ligadura-para-modificar) para obtener el diccionario y su tipo
+; declarado. Si el tipo es dict<T,U>, la clave debe ser de tipo T y el valor de
+; tipo U (si es void no se valida). Luego inserta o actualiza el par con
+; poner-en-diccionario! y retorna el diccionario.
+(define aplicar-set-dict
+  (lambda (id amb clave valor)
+    (let* ((ligadura (buscar-ligadura-para-modificar amb id))
+           (dic (exigir-diccionario 'set-dict (deref (car ligadura))))
+           (tipo-variable (cadr ligadura)))
+      (begin
+        (validar-par-diccionario id tipo-variable clave valor)
+        (poner-en-diccionario! dic clave valor)))))
+
+; validar-par-diccionario:
+; Proposito:
+; Sym x T x V x V -> B : Si el tipo declarado es dict<T,U>, verifica que la clave
+; sea de tipo T y el valor de tipo U; si no, lanza un error. Con cualquier otro
+; tipo declarado (por ejemplo void) no valida y retorna #t.
+(define validar-par-diccionario
+  (lambda (id tipo-variable clave valor)
+    (cases tipo tipo-variable
+      (tipo-complejo (tc)
+        (cases tipo-compuesto tc
+          (diccionario-tipo (tipo-clave tipo-valor)
+            (cond
+              ((not (validar-tipo (tipo-simple tipo-clave) clave))
+               (eopl:error 'set-dict "Las claves de ~a son de tipo ~a, se recibio ~a"
+                           id (nombre-tipo-primitivo tipo-clave) (mostrar-valor clave)))
+              ((not (validar-tipo (tipo-simple tipo-valor) valor))
+               (eopl:error 'set-dict "Los valores de ~a son de tipo ~a, se recibio ~a"
+                           id (nombre-tipo-primitivo tipo-valor) (mostrar-valor valor)))
+              (else #t)))
+          (else #t)))
+      (else #t))))
+
+; nombre-tipo-primitivo:
+; Proposito:
+; TP -> S : Retorna el nombre de un tipo primitivo como se escribe en
+; LogicFusion ("int", "float", "string", "bool" o "void"), para los mensajes.
+(define nombre-tipo-primitivo
+  (lambda (tp)
+    (cases tipo-primitivo tp
+      (entero-tipo () "int")
+      (decimal-tipo () "float")
+      (cadena-tipo () "string")
+      (booleano-tipo () "bool")
+      (void-tipo () "void"))))
 
 ; exigir-diccionario:
 ; Proposito:
