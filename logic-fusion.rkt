@@ -1201,6 +1201,96 @@
                    (car parametros) nombre (car tipos) (mostrar-valor (car argumentos)))))))
 
 ;; ============================================================================
+;; DICCIONARIOS
+;; ============================================================================
+;; Un diccionario guarda una caja (vector de 2 casillas): en la casilla 0 la
+;; lista de claves (inmutable) y en la 1 el vector de valores (mutable). Son
+;; paralelos, como simbolos y valores en ambiente-extendido: la clave en la
+;; posicion i corresponde al valor en la posicion i. Actualizar un valor es un
+;; vector-set! en el vector; agregar una clave reemplaza la lista y el vector
+;; por unos con una casilla mas (por eso estan dentro de la caja).
+
+(define-datatype diccionario diccionario?
+  (un-diccionario (caja vector?)))   ; #(lista-de-claves vector-de-valores)
+
+; obtener-claves:
+; Proposito:
+; Dic -> L(V) : Retorna la lista de claves del diccionario.
+(define obtener-claves
+  (lambda (dic)
+    (cases diccionario dic
+      (un-diccionario (caja) (vector-ref caja 0)))))
+
+; obtener-valores:
+; Proposito:
+; Dic -> Vector : Retorna el vector de valores del diccionario.
+(define obtener-valores
+  (lambda (dic)
+    (cases diccionario dic
+      (un-diccionario (caja) (vector-ref caja 1)))))
+
+; buscar-posicion-clave:
+; Proposito:
+; V x L(V) -> N o #f : Retorna la posicion de la clave en la lista de claves
+; (comparando con valores-iguales?, como el switch) o #f si no esta.
+(define buscar-posicion-clave
+  (lambda (clave claves)
+    (list-index (lambda (c) (valores-iguales? c clave)) claves)))
+
+; buscar-en-diccionario:
+; Proposito:
+; Dic x V -> V : Retorna el valor asociado a la clave. Si la clave no existe
+; lanza un error.
+(define buscar-en-diccionario
+  (lambda (dic clave)
+    (let ((pos (buscar-posicion-clave clave (obtener-claves dic))))
+      (if (number? pos)
+          (vector-ref (obtener-valores dic) pos)
+          (eopl:error 'ref-dict "La clave ~a no existe en el diccionario"
+                      (mostrar-valor clave))))))
+
+; poner-en-diccionario!:
+; Proposito:
+; Dic x V x V -> Dic : Si la clave existe, cambia su valor (vector-set!). Si no
+; existe, agrega la clave al final: reemplaza en la caja la lista de claves y
+; el vector de valores por unos con una casilla mas. Retorna el diccionario.
+(define poner-en-diccionario!
+  (lambda (dic clave valor)
+    (cases diccionario dic
+      (un-diccionario (caja)
+        (let ((pos (buscar-posicion-clave clave (vector-ref caja 0))))
+          (if (number? pos)
+              (begin
+                (vector-set! (vector-ref caja 1) pos valor)
+                dic)
+              (begin
+                (vector-set! caja 0 (append (vector-ref caja 0) (list clave)))
+                (vector-set! caja 1 (list->vector
+                                     (append (vector->list (vector-ref caja 1))
+                                             (list valor))))
+                dic)))))))
+
+; construir-diccionario:
+; Proposito:
+; L(V) x L(V) -> Dic : Crea un diccionario con las claves y valores dados (en
+; orden). Si una clave se repite lanza un error, porque las claves son unicas.
+(define construir-diccionario
+  (lambda (claves valores)
+    (let ((dic (un-diccionario (vector '() (vector)))))
+      (letrec ((agregar
+                (lambda (cs vs)
+                  (cond
+                    ((null? cs) dic)
+                    ((number? (buscar-posicion-clave (car cs) (obtener-claves dic)))
+                     (eopl:error 'diccionario "La clave ~a esta repetida"
+                                 (mostrar-valor (car cs))))
+                    (else
+                     (begin
+                       (poner-en-diccionario! dic (car cs) (car vs))
+                       (agregar (cdr cs) (cdr vs))))))))
+        (agregar claves valores)))))
+
+;; ============================================================================
 ;; FUNCIONES AUXILIARES
 ;; ============================================================================
 
