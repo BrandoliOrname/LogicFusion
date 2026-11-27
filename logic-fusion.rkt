@@ -54,10 +54,12 @@
 ;;
 ;; dato-primitivo ::= entero | decimal | texto | "True" | "False"
 ;;
-;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
+;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "%" | "concat"
 ;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
-;;   Precedencia (de mayor a menor): * /  >  + ~  >  concat  >  comparaciones.
-;;   Asociatividad a izquierda. Las comparaciones no se encadenan.
+;;                     | "and" | "or"
+;;   Precedencia (de mayor a menor): * / %  >  + ~  >  concat  >  comparaciones
+;;   >  and  >  or. Asociatividad a izquierda. Las comparaciones no se encadenan.
+;;   int / int da int (division entera); si alguno es float da float.
 ;;
 ;; primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
 ;;
