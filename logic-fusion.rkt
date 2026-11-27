@@ -724,7 +724,7 @@
       ((zero? valor2)
        (eopl:error 'evaluar-primitiva-binaria
                    "Modulo por cero: ~s mod ~s" valor1 valor2))
-      ((and (integer? valor1) (integer? valor2)) remainder valor1 valor2)
+      ((and (entero? valor1) (entero? valor2)) (remainder valor1 valor2))
       (else (modulo-decimal valor1 valor2)))))
 
 (define (modulo-decimal a b)
