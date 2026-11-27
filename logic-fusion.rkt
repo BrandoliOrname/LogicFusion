@@ -639,8 +639,8 @@
       (menor-igual ()    (condicional? '<= valor1 valor2))
       (diferente ()      (condicional? '!= valor1 valor2))
       (igual ()          (condicional? '== valor1 valor2))
-      (disyuncion ()     (or valor1 valor2))
-      (conjuncion ()     (and valor1 valor2))
+      (disyuncion ()     (or (valor-verdad? valor1) (valor-verdad? valor2)))
+      (conjuncion ()     (and (valor-verdad? valor1) (valor-verdad? valor2)))
       )))
 
 ; evaluar-primitiva-unaria:
@@ -926,6 +926,26 @@
       (igual () #t)
       (else #f))))
 
+; es-conjuncion?:
+; Proposito:
+; PB -> B : Retorna #t si la primitiva binaria es and. Se resuelve despues de
+; las comparaciones, asi 1 < 2 and 3 < 4 compara primero y luego aplica and.
+(define es-conjuncion?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (conjuncion () #t)
+      (else #f))))
+
+; es-disyuncion?:
+; Proposito:
+; PB -> B : Retorna #t si la primitiva binaria es or. Es el ultimo nivel (menor
+; precedencia), como en la mayoria de lenguajes: a or b and c = a or (b and c).
+(define es-disyuncion?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (disyuncion () #t)
+      (else #f))))
+
 ; reducir-nivel:
 ; Proposito:
 ; L(V) x L(PB) x Pred -> L(L(V)) : Procedimiento que recibe una lista de
@@ -973,8 +993,8 @@
                 '()))))
 ; evaluar-secuencia:
 ; L(V) x L(PB) -> V : Procedimiento que recibe una lista de valores y una
-; lista de operadores. Primero utiliza reducir-nivel para resolver las
-; multiplicaciones y divisiones, después resuelve las sumas y restas.
+; lista de operadores. Utiliza reducir-nivel para resolver los operadores por
+; niveles de precedencia: * / %, luego + ~, concat, comparaciones, and y or.
 ; Finalmente, retorna el resultado de la expresión evaluada.
 (define evaluar-secuencia
   (lambda (valores operadores)
@@ -993,10 +1013,18 @@
 
            (nivel-4
             (reducir-nivel (car nivel-3) (cadr nivel-3)
-                           es-comparacion?)))
+                           es-comparacion?))
 
-      (if (null? (cdr (car nivel-4)))
-          (car (car nivel-4))
+           (nivel-5
+            (reducir-nivel (car nivel-4) (cadr nivel-4)
+                           es-conjuncion?))
+
+           (nivel-6
+            (reducir-nivel (car nivel-5) (cadr nivel-5)
+                           es-disyuncion?)))
+
+      (if (null? (cdr (car nivel-6)))
+          (car (car nivel-6))
           (eopl:error 'evaluar-secuencia
                       "Quedaron operadores sin evaluar")))))
 ;; ============================================================================
