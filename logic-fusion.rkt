@@ -484,6 +484,7 @@
           (lista-tipo (t) (list? valor))
           (vector-tipo (t) (vector? valor))
           (proc-tipo () (procedimiento? valor))
+          (sat-tipo () (instancia-sat? valor))
           ;; dict<T,U>: todas las claves de tipo T y todos los valores de tipo U
           (diccionario-tipo (tipo-clave tipo-valor)
             (and (diccionario? valor)
@@ -932,6 +933,7 @@
       ((list? valor) "list")
       ((vector? valor) "vector")
       ((procedimiento? valor) "proc")
+      ((instancia-sat? valor) "sat")
       ((diccionario? valor) "dict")
       (else "desconocido"))))
 
