@@ -40,6 +40,11 @@
 ;;                | "append" "(" expresion "," expresion ")"
 ;;                | "ref-list" "(" expresion "," expresion ")"
 ;;                | "length" "(" expresion ")"
+;;                | "{" { expresion ":" expresion "," } "}"     (diccionario literal)
+;;                | "create-dict" "(" ")" | "dict?" "(" expresion ")"
+;;                | "ref-dict" "(" expresion "," expresion ")"
+;;                | "set-dict" "(" identificador "," expresion "," expresion ")"
+;;                | "keys" "(" expresion ")" | "values" "(" expresion ")"
 ;;                | "BLOCK" "{" expresion ";" { expresion ";" } "}"
 ;;                | "LOCALS" "{" definicion { definicion } "}"
 ;;                  "{" expresion ";" { expresion ";" } "}"
@@ -1558,6 +1563,25 @@
 ;; (scan&parse "GLOBALS { int x = 1; } PROGRAM { int r = LOCALS { int x = 2; } { set x -> 3; x; }; }")
 ;; (scan&parse "GLOBALS {} PROGRAM { list<int> x = (1,); }")
 ;; (scan&parse "GLOBALS {} PROGRAM { int x = (1 + 2) * 3; }")
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA DICCIONARIOS
+;; ============================================================================
+;; diccionario-literal y keys / values:
+;; (scan&parse "GLOBALS { dict<string, int> edades = {\"Juan\": 25, \"Ana\": 30}; } PROGRAM { proc main = lambda () { return (keys(edades), values(edades)); }; }") ; ((\"Juan\" \"Ana\") (25 30))
+;; diccionario-vacio y diccionario-predicado:
+;; (scan&parse "GLOBALS { dict<string, int> d = create-dict(); } PROGRAM { proc main = lambda () { return (dict?(d), dict?(42)); }; }") ; (#t #f)
+;; referencia-diccionario (claves int):
+;; (scan&parse "GLOBALS { dict<int, string> n = {1: \"uno\", 2: \"dos\"}; } PROGRAM { proc main = lambda () { return ref-dict(n, 2); }; }") ; \"dos\"
+;; modificar-diccionario (actualiza y agrega):
+;; (scan&parse "GLOBALS { dict<string, int> d = create-dict(); } PROGRAM { proc main = lambda () { return BLOCK { set-dict(d, \"edad\", 34); set-dict(d, \"edad\", 35); ref-dict(d, \"edad\"); }; }; }") ; 35
+;; Valores de cualquier tipo con void:
+;; (scan&parse "GLOBALS { dict<string, void> datos = {\"Nombre\": \"Juan\", \"Edad\": 40, \"Casado\": True}; } PROGRAM { proc main = lambda () { return values(datos); }; }") ; (\"Juan\" 40 #t)
+;; Errores:
+;; (scan&parse "GLOBALS { dict<string, int> d = {\"a\": \"x\"}; } PROGRAM { proc main = lambda () { return d; }; }")                 ; error: tipo del diccionario
+;; (scan&parse "GLOBALS { dict<string, int> d = create-dict(); } PROGRAM { proc main = lambda () { return set-dict(d, 5, 1); }; }") ; error: tipo de la clave
+;; (scan&parse "GLOBALS { dict<string, int> d = {\"a\": 1}; } PROGRAM { proc main = lambda () { return ref-dict(d, \"b\"); }; }")    ; error: la clave no existe
+;; (scan&parse "GLOBALS { dict<string, int> d = {\"a\": 1, \"a\": 2}; } PROGRAM { proc main = lambda () { return d; }; }")           ; error: clave repetida
 
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE LISTAS

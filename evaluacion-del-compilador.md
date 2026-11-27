@@ -87,7 +87,13 @@ PROGRAM {
 (1 2 3)
 
 % Diccionarios
-Falta por implementar
+GLOBALS {
+	dict<string, int> edades = {"Juan": 25, "Ana": 30};
+}
+PROGRAM {
+	proc main = lambda () { return ref-dict(edades, "Ana"); };
+}
+30
 
 % Vectores 
 Falta por implementar
