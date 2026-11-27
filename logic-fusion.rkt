@@ -206,6 +206,17 @@
     ;; set-dict recibe el nombre de la variable para validar con su tipo dict<T,U>
     (operando ("set-dict" "(" identificador "," expresion "," expresion ")") modificar-diccionario)
 
+    ;; Instancias SAT (FNC). FNC n ( (l or l ...) and (l or l ...) ... )
+    ;; Los literales son los tokens numericos de la lexica: entero-positivo es una
+    ;; variable (x) y entero-negativo es su negacion (-x).
+    (operando ("FNC" entero-positivo "(" clausula-sat (arbno "and" clausula-sat) ")")
+              sat-instancia)
+    (clausula-sat ("(" literal-sat (arbno "or" literal-sat) ")") una-clausula)
+    (literal-sat (entero-positivo) literal-positivo)
+    (literal-sat (entero-negativo) literal-negativo)
+    ;; solve(e): resuelve una instancia SAT por busqueda exhaustiva
+    (operando ("solve" "(" expresion ")") sat-resolver)
+    
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
     
