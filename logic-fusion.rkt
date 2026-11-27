@@ -54,10 +54,12 @@
 ;;
 ;; dato-primitivo ::= entero | decimal | texto | "True" | "False"
 ;;
-;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "concat"
+;; primitiva-binaria ::= "+" | "~" | "/" | "*" | "%" | "concat"
 ;;                     | ">" | "<" | ">=" | "<=" | "!=" | "=="
-;;   Precedencia (de mayor a menor): * /  >  + ~  >  concat  >  comparaciones.
-;;   Asociatividad a izquierda. Las comparaciones no se encadenan.
+;;                     | "and" | "or"
+;;   Precedencia (de mayor a menor): * / %  >  + ~  >  concat  >  comparaciones
+;;   >  and  >  or. Asociatividad a izquierda. Las comparaciones no se encadenan.
+;;   int / int da int (division entera); si alguno es float da float.
 ;;
 ;; primitiva-unaria  ::= "longitud" | "add1" | "sub1" | "neg"
 ;;
@@ -397,7 +399,7 @@
                            
 
       (constante-definicion (tipo identificador expresion)
-                            (let ((valor-constante (evaluar-expresion expresion ambiente)))
+                            (let ((valor-constante (coercionar-tipo tipo (evaluar-expresion expresion ambiente))))
                               (if (validar-tipo tipo valor-constante)
                                   (extender-ambiente-definicion tipo identificador valor-constante #t ambiente)
 
@@ -639,8 +641,8 @@
       (menor-igual ()    (condicional? '<= valor1 valor2))
       (diferente ()      (condicional? '!= valor1 valor2))
       (igual ()          (condicional? '== valor1 valor2))
-      (disyuncion ()     (or valor1 valor2))
-      (conjuncion ()     (and valor1 valor2))
+      (disyuncion ()     (or (valor-verdad? valor1) (valor-verdad? valor2)))
+      (conjuncion ()     (and (valor-verdad? valor1) (valor-verdad? valor2)))
       )))
 
 ; evaluar-primitiva-unaria:
@@ -710,6 +712,7 @@
                    valor1 valor2))
       ((zero? valor2)
        (eopl:error 'evaluar-primitiva-binaria "Division por cero: ~s / ~s" valor1 valor2))
+      ((and (entero? valor1) (entero? valor2)) (quotient valor1 valor2))
       (else
        (/ (exact->inexact valor1)
           (exact->inexact valor2))))))
@@ -724,7 +727,7 @@
       ((zero? valor2)
        (eopl:error 'evaluar-primitiva-binaria
                    "Modulo por cero: ~s mod ~s" valor1 valor2))
-      ((and (integer? valor1) (integer? valor2)) remainder valor1 valor2)
+      ((and (entero? valor1) (entero? valor2)) (remainder valor1 valor2))
       (else (modulo-decimal valor1 valor2)))))
 
 (define (modulo-decimal a b)
@@ -750,6 +753,13 @@
                     "La primitiva concat solo opera sobre string, se recibio: ~s y ~s"
                     valor1 valor2))))
 
+; coercionar-tipo:
+; Proposito:
+; T x V -> V : Si el tipo declarado es float y el valor es un numero, lo
+; convierte a decimal (float x = 20 guarda 20.0). Cualquier otro caso se
+; retorna sin cambio: un float en un int NO se trunca, validar-tipo debe
+; rechazarlo con error de tipo. Se usa al crear (variable y constante) y al
+; asignar (set).
 (define coercionar-tipo
   (lambda (tipo-dato valor)
     (cases tipo tipo-dato
@@ -759,11 +769,7 @@
             (if (number? valor)
                 (exact->inexact valor)   ; int -> float automaticamente
                 valor))
-          (entero-tipo ()
-            (if (and (real? valor) (not (entero? valor)))
-                (inexact->exact (truncate valor))  ; float -> int (trunca)
-                valor))
-          (else valor)))                 ; string, bool, void: sin cambio
+          (else valor)))                 ; int, string, bool, void: sin cambio
       (tipo-complejo (tc) valor))))      ; listas, vectores: sin cambio
 
 ; longitud-de-cadena:
@@ -926,6 +932,26 @@
       (igual () #t)
       (else #f))))
 
+; es-conjuncion?:
+; Proposito:
+; PB -> B : Retorna #t si la primitiva binaria es and. Se resuelve despues de
+; las comparaciones, asi 1 < 2 and 3 < 4 compara primero y luego aplica and.
+(define es-conjuncion?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (conjuncion () #t)
+      (else #f))))
+
+; es-disyuncion?:
+; Proposito:
+; PB -> B : Retorna #t si la primitiva binaria es or. Es el ultimo nivel (menor
+; precedencia), como en la mayoria de lenguajes: a or b and c = a or (b and c).
+(define es-disyuncion?
+  (lambda (op)
+    (cases primitiva-binaria op
+      (disyuncion () #t)
+      (else #f))))
+
 ; reducir-nivel:
 ; Proposito:
 ; L(V) x L(PB) x Pred -> L(L(V)) : Procedimiento que recibe una lista de
@@ -973,8 +999,8 @@
                 '()))))
 ; evaluar-secuencia:
 ; L(V) x L(PB) -> V : Procedimiento que recibe una lista de valores y una
-; lista de operadores. Primero utiliza reducir-nivel para resolver las
-; multiplicaciones y divisiones, después resuelve las sumas y restas.
+; lista de operadores. Utiliza reducir-nivel para resolver los operadores por
+; niveles de precedencia: * / %, luego + ~, concat, comparaciones, and y or.
 ; Finalmente, retorna el resultado de la expresión evaluada.
 (define evaluar-secuencia
   (lambda (valores operadores)
@@ -993,10 +1019,18 @@
 
            (nivel-4
             (reducir-nivel (car nivel-3) (cadr nivel-3)
-                           es-comparacion?)))
+                           es-comparacion?))
 
-      (if (null? (cdr (car nivel-4)))
-          (car (car nivel-4))
+           (nivel-5
+            (reducir-nivel (car nivel-4) (cadr nivel-4)
+                           es-conjuncion?))
+
+           (nivel-6
+            (reducir-nivel (car nivel-5) (cadr nivel-5)
+                           es-disyuncion?)))
+
+      (if (null? (cdr (car nivel-6)))
+          (car (car nivel-6))
           (eopl:error 'evaluar-secuencia
                       "Quedaron operadores sin evaluar")))))
 ;; ============================================================================
@@ -1088,11 +1122,12 @@
                 (buscar-ligadura-para-modificar amb simbolo)))))))
 
 (define aplicar-asignacion
-  (lambda (id amb valor-para-cambiar)
+  (lambda (id amb valor-recibido)
     (let* ((lista-ref-tipo-const (buscar-ligadura-para-modificar amb id)) ;sacamos cada elemento de la lista
            (referencia (car lista-ref-tipo-const))
            (tipo-variable (cadr lista-ref-tipo-const))
            (es-constante (caddr lista-ref-tipo-const))
+           (valor-para-cambiar (coercionar-tipo tipo-variable valor-recibido)) ; int -> float si aplica
            )
              (if es-constante ;cuerpo del let*
                (eopl:error 'aplicar-asignacion "No se puede cambiar la constante ~s" id)
@@ -1136,15 +1171,18 @@
             (eopl:error 'aplicar-procedimiento
                         "El procedimiento ~a espera ~a argumento(s) y recibio ~a"
                         nombre (length parametros) (length argumentos))
-            (begin
-              (validar-argumentos tipos parametros argumentos nombre)
-              (evaluar-expresion cuerpo
-                                 (ambiente-extendido
-                                  (list->vector tipos)
-                                  parametros
-                                  (list->vector argumentos)
-                                  (make-vector (length parametros) #f)
-                                  amb))))))))
+            ;; cada argumento pasa por coercionar-tipo con el tipo de su
+            ;; parametro (float x recibiendo 20 guarda 20.0), como al crear una variable
+            (let ((valores (map coercionar-tipo tipos argumentos)))
+              (begin
+                (validar-argumentos tipos parametros valores nombre)
+                (evaluar-expresion cuerpo
+                                   (ambiente-extendido
+                                    (list->vector tipos)
+                                    parametros
+                                    (list->vector valores)
+                                    (make-vector (length parametros) #f)
+                                    amb)))))))))
 
 ; validar-argumentos:
 ; Proposito:
