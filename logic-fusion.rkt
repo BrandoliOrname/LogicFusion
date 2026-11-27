@@ -191,6 +191,11 @@
     ; 9. length(lst)
     (operando ("length" "(" expresion ")" ) longitud-lista)
 
+    ;; Diccionarios (adendo 6). El literal es el de la guia: {"Juan": 25, "Ana": 30}
+    (operando ("{" (separated-list expresion ":" expresion ",") "}") diccionario-literal)
+    (operando ("create-dict" "(" ")") diccionario-vacio)
+    (operando ("dict?" "(" expresion ")") diccionario-predicado)
+
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
     
@@ -582,6 +587,16 @@
                         (if (list? l)
                             (length l)
                             (eopl:error 'longitud-lista "No es una lista ~s" l))))
+      ;; Diccionarios: cada par se evalua en orden (clave y luego valor)
+      (diccionario-literal (claves valores)
+        (let ((pares (map (lambda (k v)
+                            (let* ((clave (evaluar-expresion k amb))
+                                   (valor (evaluar-expresion v amb)))
+                              (cons clave valor)))
+                          claves valores)))
+          (construir-diccionario (map car pares) (map cdr pares))))
+      (diccionario-vacio () (construir-diccionario '() '()))
+      (diccionario-predicado (exp) (diccionario? (evaluar-expresion exp amb)))
       
 
       (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
