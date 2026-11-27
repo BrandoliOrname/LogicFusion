@@ -195,6 +195,9 @@
     (operando ("{" (separated-list expresion ":" expresion ",") "}") diccionario-literal)
     (operando ("create-dict" "(" ")") diccionario-vacio)
     (operando ("dict?" "(" expresion ")") diccionario-predicado)
+    (operando ("ref-dict" "(" expresion "," expresion ")") referencia-diccionario)
+    (operando ("keys" "(" expresion ")") claves-diccionario)
+    (operando ("values" "(" expresion ")") valores-diccionario)
 
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
@@ -597,6 +600,16 @@
           (construir-diccionario (map car pares) (map cdr pares))))
       (diccionario-vacio () (construir-diccionario '() '()))
       (diccionario-predicado (exp) (diccionario? (evaluar-expresion exp amb)))
+      (referencia-diccionario (exp-dic exp-clave)
+        (let* ((dic (exigir-diccionario 'ref-dict (evaluar-expresion exp-dic amb)))
+               (clave (evaluar-expresion exp-clave amb)))
+          (buscar-en-diccionario dic clave)))
+      ;; keys: la lista de claves tal cual (es inmutable, se puede compartir)
+      (claves-diccionario (exp)
+        (obtener-claves (exigir-diccionario 'keys (evaluar-expresion exp amb))))
+      ;; values: el vector convertido a lista nueva (asi no se modifica el diccionario)
+      (valores-diccionario (exp)
+        (vector->list (obtener-valores (exigir-diccionario 'values (evaluar-expresion exp amb)))))
       
 
       (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
@@ -1302,6 +1315,17 @@
                                      (append (vector->list (vector-ref caja 1))
                                              (list valor))))
                 dic)))))))
+
+; exigir-diccionario:
+; Proposito:
+; Sym x V -> Dic : Retorna el valor si es un diccionario; si no, lanza un error
+; con el nombre de la primitiva (ref-dict, keys, values o set-dict).
+(define exigir-diccionario
+  (lambda (primitiva valor)
+    (if (diccionario? valor)
+        valor
+        (eopl:error primitiva "Se esperaba un diccionario, se recibio un ~a (~a)"
+                    (nombre-tipo-valor valor) (mostrar-valor valor)))))
 
 ; construir-diccionario:
 ; Proposito:
