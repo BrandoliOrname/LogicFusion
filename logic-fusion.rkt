@@ -40,6 +40,11 @@
 ;;                | "append" "(" expresion "," expresion ")"
 ;;                | "ref-list" "(" expresion "," expresion ")"
 ;;                | "length" "(" expresion ")"
+;;                | "{" { expresion ":" expresion "," } "}"     (diccionario literal)
+;;                | "create-dict" "(" ")" | "dict?" "(" expresion ")"
+;;                | "ref-dict" "(" expresion "," expresion ")"
+;;                | "set-dict" "(" identificador "," expresion "," expresion ")"
+;;                | "keys" "(" expresion ")" | "values" "(" expresion ")"
 ;;                | "BLOCK" "{" expresion ";" { expresion ";" } "}"
 ;;                | "LOCALS" "{" definicion { definicion } "}"
 ;;                  "{" expresion ";" { expresion ";" } "}"
@@ -190,6 +195,16 @@
     (operando ("ref-list" "(" expresion "," expresion ")" ) referencia-lista)
     ; 9. length(lst)
     (operando ("length" "(" expresion ")" ) longitud-lista)
+
+    ;; Diccionarios (adendo 6). El literal es el de la guia: {"Juan": 25, "Ana": 30}
+    (operando ("{" (separated-list expresion ":" expresion ",") "}") diccionario-literal)
+    (operando ("create-dict" "(" ")") diccionario-vacio)
+    (operando ("dict?" "(" expresion ")") diccionario-predicado)
+    (operando ("ref-dict" "(" expresion "," expresion ")") referencia-diccionario)
+    (operando ("keys" "(" expresion ")") claves-diccionario)
+    (operando ("values" "(" expresion ")") valores-diccionario)
+    ;; set-dict recibe el nombre de la variable para validar con su tipo dict<T,U>
+    (operando ("set-dict" "(" identificador "," expresion "," expresion ")") modificar-diccionario)
 
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
@@ -458,7 +473,24 @@
           (lista-tipo (t) (list? valor))
           (vector-tipo (t) (vector? valor))
           (proc-tipo () (procedimiento? valor))
+          ;; dict<T,U>: todas las claves de tipo T y todos los valores de tipo U
+          (diccionario-tipo (tipo-clave tipo-valor)
+            (and (diccionario? valor)
+                 (todos-del-tipo? tipo-clave (obtener-claves valor))
+                 (todos-del-tipo? tipo-valor (vector->list (obtener-valores valor)))))
           (else (eopl:error 'validar-tipo "tipo compuesto ~s no soportado" tc)))))))
+
+; todos-del-tipo?:
+; Proposito:
+; TP x L(V) -> B : Retorna #t si todos los valores de la lista cumplen el tipo
+; primitivo dado (se valida con validar-tipo envolviendolo en tipo-simple).
+(define todos-del-tipo?
+  (lambda (tipo-prim valores)
+    (cond
+      ((null? valores) #t)
+      ((validar-tipo (tipo-simple tipo-prim) (car valores))
+       (todos-del-tipo? tipo-prim (cdr valores)))
+      (else #f))))
 
 (define evaluar-dato-primitivo
   (lambda (dato amb)
@@ -565,6 +597,30 @@
                         (if (list? l)
                             (length l)
                             (eopl:error 'longitud-lista "No es una lista ~s" l))))
+      ;; Diccionarios: cada par se evalua en orden (clave y luego valor)
+      (diccionario-literal (claves valores)
+        (let ((pares (map (lambda (k v)
+                            (let* ((clave (evaluar-expresion k amb))
+                                   (valor (evaluar-expresion v amb)))
+                              (cons clave valor)))
+                          claves valores)))
+          (construir-diccionario (map car pares) (map cdr pares))))
+      (diccionario-vacio () (construir-diccionario '() '()))
+      (diccionario-predicado (exp) (diccionario? (evaluar-expresion exp amb)))
+      (referencia-diccionario (exp-dic exp-clave)
+        (let* ((dic (exigir-diccionario 'ref-dict (evaluar-expresion exp-dic amb)))
+               (clave (evaluar-expresion exp-clave amb)))
+          (buscar-en-diccionario dic clave)))
+      ;; keys: la lista de claves tal cual (es inmutable, se puede compartir)
+      (claves-diccionario (exp)
+        (obtener-claves (exigir-diccionario 'keys (evaluar-expresion exp amb))))
+      ;; values: el vector convertido a lista nueva (asi no se modifica el diccionario)
+      (valores-diccionario (exp)
+        (vector->list (obtener-valores (exigir-diccionario 'values (evaluar-expresion exp amb)))))
+      (modificar-diccionario (id exp-clave exp-valor)
+        (let* ((clave (evaluar-expresion exp-clave amb))
+               (valor (evaluar-expresion exp-valor amb)))
+          (aplicar-set-dict id amb clave valor)))
       
 
       (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
@@ -861,6 +917,7 @@
       ((list? valor) "list")
       ((vector? valor) "vector")
       ((procedimiento? valor) "proc")
+      ((diccionario? valor) "dict")
       (else "desconocido"))))
 
 ; mostrar-valor:
@@ -1201,6 +1258,158 @@
                    (car parametros) nombre (car tipos) (mostrar-valor (car argumentos)))))))
 
 ;; ============================================================================
+;; DICCIONARIOS
+;; ============================================================================
+;; Un diccionario guarda una caja (vector de 2 casillas): en la casilla 0 la
+;; lista de claves (inmutable) y en la 1 el vector de valores (mutable). Son
+;; paralelos, como simbolos y valores en ambiente-extendido: la clave en la
+;; posicion i corresponde al valor en la posicion i. Actualizar un valor es un
+;; vector-set! en el vector; agregar una clave reemplaza la lista y el vector
+;; por unos con una casilla mas (por eso estan dentro de la caja).
+
+(define-datatype diccionario diccionario?
+  (un-diccionario (caja vector?)))   ; #(lista-de-claves vector-de-valores)
+
+; obtener-claves:
+; Proposito:
+; Dic -> L(V) : Retorna la lista de claves del diccionario.
+(define obtener-claves
+  (lambda (dic)
+    (cases diccionario dic
+      (un-diccionario (caja) (vector-ref caja 0)))))
+
+; obtener-valores:
+; Proposito:
+; Dic -> Vector : Retorna el vector de valores del diccionario.
+(define obtener-valores
+  (lambda (dic)
+    (cases diccionario dic
+      (un-diccionario (caja) (vector-ref caja 1)))))
+
+; buscar-posicion-clave:
+; Proposito:
+; V x L(V) -> N o #f : Retorna la posicion de la clave en la lista de claves
+; (comparando con valores-iguales?, como el switch) o #f si no esta.
+(define buscar-posicion-clave
+  (lambda (clave claves)
+    (list-index (lambda (c) (valores-iguales? c clave)) claves)))
+
+; buscar-en-diccionario:
+; Proposito:
+; Dic x V -> V : Retorna el valor asociado a la clave. Si la clave no existe
+; lanza un error.
+(define buscar-en-diccionario
+  (lambda (dic clave)
+    (let ((pos (buscar-posicion-clave clave (obtener-claves dic))))
+      (if (number? pos)
+          (vector-ref (obtener-valores dic) pos)
+          (eopl:error 'ref-dict "La clave ~a no existe en el diccionario"
+                      (mostrar-valor clave))))))
+
+; poner-en-diccionario!:
+; Proposito:
+; Dic x V x V -> Dic : Si la clave existe, cambia su valor (vector-set!). Si no
+; existe, agrega la clave al final: reemplaza en la caja la lista de claves y
+; el vector de valores por unos con una casilla mas. Retorna el diccionario.
+(define poner-en-diccionario!
+  (lambda (dic clave valor)
+    (cases diccionario dic
+      (un-diccionario (caja)
+        (let ((pos (buscar-posicion-clave clave (vector-ref caja 0))))
+          (if (number? pos)
+              (begin
+                (vector-set! (vector-ref caja 1) pos valor)
+                dic)
+              (begin
+                (vector-set! caja 0 (append (vector-ref caja 0) (list clave)))
+                (vector-set! caja 1 (list->vector
+                                     (append (vector->list (vector-ref caja 1))
+                                             (list valor))))
+                dic)))))))
+
+; aplicar-set-dict:
+; Proposito:
+; Sym x Amb x V x V -> Dic : Busca la variable id (como set, con
+; buscar-ligadura-para-modificar) para obtener el diccionario y su tipo
+; declarado. Si el tipo es dict<T,U>, la clave debe ser de tipo T y el valor de
+; tipo U (si es void no se valida). Luego inserta o actualiza el par con
+; poner-en-diccionario! y retorna el diccionario.
+(define aplicar-set-dict
+  (lambda (id amb clave valor)
+    (let* ((ligadura (buscar-ligadura-para-modificar amb id))
+           (dic (exigir-diccionario 'set-dict (deref (car ligadura))))
+           (tipo-variable (cadr ligadura)))
+      (begin
+        (validar-par-diccionario id tipo-variable clave valor)
+        (poner-en-diccionario! dic clave valor)))))
+
+; validar-par-diccionario:
+; Proposito:
+; Sym x T x V x V -> B : Si el tipo declarado es dict<T,U>, verifica que la clave
+; sea de tipo T y el valor de tipo U; si no, lanza un error. Con cualquier otro
+; tipo declarado (por ejemplo void) no valida y retorna #t.
+(define validar-par-diccionario
+  (lambda (id tipo-variable clave valor)
+    (cases tipo tipo-variable
+      (tipo-complejo (tc)
+        (cases tipo-compuesto tc
+          (diccionario-tipo (tipo-clave tipo-valor)
+            (cond
+              ((not (validar-tipo (tipo-simple tipo-clave) clave))
+               (eopl:error 'set-dict "Las claves de ~a son de tipo ~a, se recibio ~a"
+                           id (nombre-tipo-primitivo tipo-clave) (mostrar-valor clave)))
+              ((not (validar-tipo (tipo-simple tipo-valor) valor))
+               (eopl:error 'set-dict "Los valores de ~a son de tipo ~a, se recibio ~a"
+                           id (nombre-tipo-primitivo tipo-valor) (mostrar-valor valor)))
+              (else #t)))
+          (else #t)))
+      (else #t))))
+
+; nombre-tipo-primitivo:
+; Proposito:
+; TP -> S : Retorna el nombre de un tipo primitivo como se escribe en
+; LogicFusion ("int", "float", "string", "bool" o "void"), para los mensajes.
+(define nombre-tipo-primitivo
+  (lambda (tp)
+    (cases tipo-primitivo tp
+      (entero-tipo () "int")
+      (decimal-tipo () "float")
+      (cadena-tipo () "string")
+      (booleano-tipo () "bool")
+      (void-tipo () "void"))))
+
+; exigir-diccionario:
+; Proposito:
+; Sym x V -> Dic : Retorna el valor si es un diccionario; si no, lanza un error
+; con el nombre de la primitiva (ref-dict, keys, values o set-dict).
+(define exigir-diccionario
+  (lambda (primitiva valor)
+    (if (diccionario? valor)
+        valor
+        (eopl:error primitiva "Se esperaba un diccionario, se recibio un ~a (~a)"
+                    (nombre-tipo-valor valor) (mostrar-valor valor)))))
+
+; construir-diccionario:
+; Proposito:
+; L(V) x L(V) -> Dic : Crea un diccionario con las claves y valores dados (en
+; orden). Si una clave se repite lanza un error, porque las claves son unicas.
+(define construir-diccionario
+  (lambda (claves valores)
+    (let ((dic (un-diccionario (vector '() (vector)))))
+      (letrec ((agregar
+                (lambda (cs vs)
+                  (cond
+                    ((null? cs) dic)
+                    ((number? (buscar-posicion-clave (car cs) (obtener-claves dic)))
+                     (eopl:error 'diccionario "La clave ~a esta repetida"
+                                 (mostrar-valor (car cs))))
+                    (else
+                     (begin
+                       (poner-en-diccionario! dic (car cs) (car vs))
+                       (agregar (cdr cs) (cdr vs))))))))
+        (agregar claves valores)))))
+
+;; ============================================================================
 ;; FUNCIONES AUXILIARES
 ;; ============================================================================
 
@@ -1354,6 +1563,25 @@
 ;; (scan&parse "GLOBALS { int x = 1; } PROGRAM { int r = LOCALS { int x = 2; } { set x -> 3; x; }; }")
 ;; (scan&parse "GLOBALS {} PROGRAM { list<int> x = (1,); }")
 ;; (scan&parse "GLOBALS {} PROGRAM { int x = (1 + 2) * 3; }")
+
+;; ============================================================================
+;; EJEMPLOS DE scan&parse PARA DICCIONARIOS
+;; ============================================================================
+;; diccionario-literal y keys / values:
+;; (scan&parse "GLOBALS { dict<string, int> edades = {\"Juan\": 25, \"Ana\": 30}; } PROGRAM { proc main = lambda () { return (keys(edades), values(edades)); }; }") ; ((\"Juan\" \"Ana\") (25 30))
+;; diccionario-vacio y diccionario-predicado:
+;; (scan&parse "GLOBALS { dict<string, int> d = create-dict(); } PROGRAM { proc main = lambda () { return (dict?(d), dict?(42)); }; }") ; (#t #f)
+;; referencia-diccionario (claves int):
+;; (scan&parse "GLOBALS { dict<int, string> n = {1: \"uno\", 2: \"dos\"}; } PROGRAM { proc main = lambda () { return ref-dict(n, 2); }; }") ; \"dos\"
+;; modificar-diccionario (actualiza y agrega):
+;; (scan&parse "GLOBALS { dict<string, int> d = create-dict(); } PROGRAM { proc main = lambda () { return BLOCK { set-dict(d, \"edad\", 34); set-dict(d, \"edad\", 35); ref-dict(d, \"edad\"); }; }; }") ; 35
+;; Valores de cualquier tipo con void:
+;; (scan&parse "GLOBALS { dict<string, void> datos = {\"Nombre\": \"Juan\", \"Edad\": 40, \"Casado\": True}; } PROGRAM { proc main = lambda () { return values(datos); }; }") ; (\"Juan\" 40 #t)
+;; Errores:
+;; (scan&parse "GLOBALS { dict<string, int> d = {\"a\": \"x\"}; } PROGRAM { proc main = lambda () { return d; }; }")                 ; error: tipo del diccionario
+;; (scan&parse "GLOBALS { dict<string, int> d = create-dict(); } PROGRAM { proc main = lambda () { return set-dict(d, 5, 1); }; }") ; error: tipo de la clave
+;; (scan&parse "GLOBALS { dict<string, int> d = {\"a\": 1}; } PROGRAM { proc main = lambda () { return ref-dict(d, \"b\"); }; }")    ; error: la clave no existe
+;; (scan&parse "GLOBALS { dict<string, int> d = {\"a\": 1, \"a\": 2}; } PROGRAM { proc main = lambda () { return d; }; }")           ; error: clave repetida
 
 ;; ============================================================================
 ;; EJEMPLOS DE scan&parse PARA LAS PRODUCCIONES DE LISTAS
