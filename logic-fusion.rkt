@@ -216,7 +216,7 @@
     (literal-sat (entero-negativo) literal-negativo)
     ;; solve(e): resuelve una instancia SAT por busqueda exhaustiva
     (operando ("solve" "(" expresion ")") sat-resolver)
-    
+
     ;; Expresion de asignacion (modificar/actualizar variables)
     (expresion ("set" identificador "->" expresion) asignar-expresion)
     
@@ -632,6 +632,10 @@
         (let* ((clave (evaluar-expresion exp-clave amb))
                (valor (evaluar-expresion exp-valor amb)))
           (aplicar-set-dict id amb clave valor)))
+
+      ;; Instancias SAT
+      (sat-instancia (n primera otras)
+                     (construir-instancia-sat n (cons primera otras)))          
       
 
       (else (eopl:error 'evaluar-operando "operando no soportado: ~s" dato-operando))
@@ -1419,6 +1423,79 @@
                        (poner-en-diccionario! dic (car cs) (car vs))
                        (agregar (cdr cs) (cdr vs))))))))
         (agregar claves valores)))))
+
+;; ============================================================================
+;; INSTANCIAS SAT
+;; ============================================================================
+;; Una instancia SAT es un valor del lenguaje con estructura propia, 
+;; guarda la cantidad de variables y las clausulas ya convertidas a
+;; listas de enteros. Ejemplo: FNC 2 ((1 or -2) and (2)) queda como
+;; (valor-sat 2 '((1 -2) (2))).
+
+(define-datatype instancia-sat instancia-sat?
+  (valor-sat (num-variables integer?)
+                 (clausulas (list-of (list-of integer?)))))
+
+; construir-instancia-sat:
+; Proposito:
+; N x L(Clausula) -> InstanciaSat : Convierte las clausulas del ASA en listas de
+; enteros, valida la instancia y retorna el valor valor-sat. Lanza un error si
+; el numero de variables no es un entero positivo o si algun literal es 0 o se
+; sale del rango 1..n.
+(define construir-instancia-sat
+  (lambda (n clausulas)
+    (if (and (entero? n) (> n 0))
+        (let ((listas (map clausula-a-lista clausulas)))
+          (begin
+            (validar-literales-sat n listas)
+            (valor-sat n listas)))
+        (eopl:error 'instancia-sat
+                    "El numero de variables debe ser un entero positivo, se recibio: ~s" n))))
+
+; clausula-a-lista:
+; Proposito:
+; ClausulaSat -> L(N) : Retorna los literales de una clausula como lista de enteros.
+(define clausula-a-lista
+  (lambda (clausula)
+    (cases clausula-sat clausula
+      (una-clausula (primero otros)
+                    (map literal-a-entero (cons primero otros))))))
+
+; literal-a-entero:
+; Proposito:
+; LiteralSat -> N : x se representa como x y la negacion de x como -x.
+(define literal-a-entero
+  (lambda (literal)
+    (cases literal-sat literal
+      (literal-positivo (n) n)
+      (literal-negativo (n) n))))
+
+; validar-literales-sat:
+; Proposito:
+; N x L(L(N)) -> B : Retorna #t si todos los literales estan entre 1 y n (en
+; valor absoluto); si alguno es 0 o se sale del rango lanza un error.
+(define validar-literales-sat
+  (lambda (n clausulas)
+    (cond
+      ((null? clausulas) #t)
+      (else (begin
+              (validar-clausula-sat n (car clausulas))
+              (validar-literales-sat n (cdr clausulas)))))))
+
+; validar-clausula-sat:
+; Proposito:
+; N x L(N) -> B : Recorre los literales de una clausula y retorna #t si todos
+; son validos. Un literal es invalido si es 0 o si su valor absoluto es mayor que n 
+; En ese caso lanza un error con el literal y el rango permitido. Es la funcion que
+; validar-literales-sat llama una vez por cada clausula de la instancia.
+(define validar-clausula-sat
+  (lambda (n literales)
+    (cond
+      ((null? literales) #t)
+      ((or (= (car literales) 0) (> (car literales) n) (< (car literales) (- 0 n)))
+       (eopl:error 'instancia-sat
+                   "El literal ~s esta fuera del rango 1..~s de variables" (car literales) n))
+      (else (validar-clausula-sat n (cdr literales))))))
 
 ;; ============================================================================
 ;; FUNCIONES AUXILIARES
