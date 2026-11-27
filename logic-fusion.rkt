@@ -458,7 +458,24 @@
           (lista-tipo (t) (list? valor))
           (vector-tipo (t) (vector? valor))
           (proc-tipo () (procedimiento? valor))
+          ;; dict<T,U>: todas las claves de tipo T y todos los valores de tipo U
+          (diccionario-tipo (tipo-clave tipo-valor)
+            (and (diccionario? valor)
+                 (todos-del-tipo? tipo-clave (obtener-claves valor))
+                 (todos-del-tipo? tipo-valor (vector->list (obtener-valores valor)))))
           (else (eopl:error 'validar-tipo "tipo compuesto ~s no soportado" tc)))))))
+
+; todos-del-tipo?:
+; Proposito:
+; TP x L(V) -> B : Retorna #t si todos los valores de la lista cumplen el tipo
+; primitivo dado (se valida con validar-tipo envolviendolo en tipo-simple).
+(define todos-del-tipo?
+  (lambda (tipo-prim valores)
+    (cond
+      ((null? valores) #t)
+      ((validar-tipo (tipo-simple tipo-prim) (car valores))
+       (todos-del-tipo? tipo-prim (cdr valores)))
+      (else #f))))
 
 (define evaluar-dato-primitivo
   (lambda (dato amb)
@@ -861,6 +878,7 @@
       ((list? valor) "list")
       ((vector? valor) "vector")
       ((procedimiento? valor) "proc")
+      ((diccionario? valor) "dict")
       (else "desconocido"))))
 
 ; mostrar-valor:
