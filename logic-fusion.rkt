@@ -470,7 +470,10 @@
           (else (eopl:error 'validar-tipo "tipo primitivo ~s no soportado" tp))))
       (tipo-complejo (tc)
         (cases tipo-compuesto tc
-          (lista-tipo (t) (list? valor))
+          ;; list<T>: es una lista y todos sus elementos son de tipo T
+          (lista-tipo (t)
+            (and (list? valor)
+                 (todos-del-tipo? t valor)))
           (vector-tipo (t) (vector? valor))
           (proc-tipo () (procedimiento? valor))
           ;; dict<T,U>: todas las claves de tipo T y todos los valores de tipo U
